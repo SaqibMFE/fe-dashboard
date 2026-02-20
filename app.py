@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
+import streamlit.components.v1 as components  # <-- ADD THIS LINE
+
 from fe_core.colors import TEAM_MAP, DRIVER_COLOUR
 from fe_core.ingest import read_outing_table_blocks
 from fe_core.runs import compute_runs_waits

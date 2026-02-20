@@ -112,7 +112,7 @@ with tab1:
     with col2:
         st.subheader("FP2 Drivers")
         if fp2_file:
-            per2 = load_per_driver(fp2_file)
+            per2 = load_per_driver(fp2_file.getvalue())  
             st.write(sorted(list(per2.keys())))
         else:
             st.info("Upload FP2 file.")

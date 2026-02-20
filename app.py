@@ -97,25 +97,33 @@ tab1, tab2, tab3 = st.tabs(["Session Overview", "Run/Wait + Tyre Sets", "Fast-La
 # TAB 1 — Session Overview
 # --------------------------------------------------------------
 with tab1:
-st.header("Session Overview")
+    st.header("Session Overview")
 
-col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
-with col1:
-    st.subheader("FP1 Drivers")
-    if fp1_file:
-        per1 = load_per_driver_from_bytes(fp1_file.getvalue()) if fp1_file else None
-        st.write(sorted(list(per1.keys())))
-    else:
-        st.info("Upload FP1 file.")
+    with col1:
+        st.subheader("FP1 Drivers")
+        if fp1_file:
+            try:
+                per1 = load_per_driver_from_bytes(fp1_file.getvalue())
+                st.write(sorted(list(per1.keys())))
+            except Exception as e:
+                st.error("FP1 load failed. Please upload a valid .xlsx.")
+                st.exception(e)
+        else:
+            st.info("Upload FP1 file.")
 
-with col2:
-    st.subheader("FP2 Drivers")
-    if fp2_file:
-        per2 = load_per_driver_from_bytes(fp2_file.getvalue()) if fp2_file else None
-        st.write(sorted(list(per2.keys())))
-    else:
-        st.info("Upload FP2 file.")
+    with col2:
+        st.subheader("FP2 Drivers")
+        if fp2_file:
+            try:
+                per2 = load_per_driver_from_bytes(fp2_file.getvalue())
+                st.write(sorted(list(per2.keys())))
+            except Exception as e:
+                st.error("FP2 load failed. Please upload a valid .xlsx.")
+                st.exception(e)
+        else:
+            st.info("Upload FP2 file.")
 
 
 # --------------------------------------------------------------

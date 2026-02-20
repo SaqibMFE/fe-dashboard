@@ -104,7 +104,7 @@ with tab1:
     with col1:
         st.subheader("FP1 Drivers")
         if fp1_file:
-            per1 = load_per_driver(fp1_file.getvalue())   
+             per1 = load_per_driver_from_bytes(fp1_file.getvalue()) if fp1_file else None  
             st.write(sorted(list(per1.keys())))
         else:
             st.info("Upload FP1 file.")
@@ -112,7 +112,7 @@ with tab1:
     with col2:
         st.subheader("FP2 Drivers")
         if fp2_file:
-            per2 = load_per_driver(fp2_file.getvalue())  
+             per2 = load_per_driver_from_bytes(fp2_file.getvalue()) if fp2_file else None
             st.write(sorted(list(per2.keys())))
         else:
             st.info("Upload FP2 file.")
@@ -130,7 +130,7 @@ with tab2:
     if not file:
         st.warning(f"Upload {session_choice} file to view.")
     else:
-        per_blocks = load_per_driver(file)
+        per_blocks = load_per_driver_from_bytes(file.getvalue()) 
 
         per_struct = {}
         for drv, df in per_blocks.items():

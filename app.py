@@ -186,6 +186,9 @@ with tab2:
 # --------------------------------------------------------------
 # TAB 3 — Fast-Lap Sequences
 # --------------------------------------------------------------
+# --------------------------------------------------------------
+# TAB 3 — Fast-Lap Sequences
+# --------------------------------------------------------------
 with tab3:
     st.header("Fast-Lap Sequences (O/B/P)")
 
@@ -204,19 +207,17 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300, 350))
 
+        # Two columns: 300 kW, 350 kW
         colA, colB = st.columns(2)
+
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
             if not df300.empty:
-                colA.markdown(
-                    render_table_with_ribbons(df300, f"{sess} — 300 kW"),
-                    unsafe_allow_html=True
-                )
+                html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
+                components.html(html300, height=min(120 + 28*len(df300), 800), scrolling=True)
 
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
             if not df350.empty:
-                colB.markdown(
-                    render_table_with_ribbons(df350, f"{sess} — 350 kW"),
-                    unsafe_allow_html=True
-                )
+                html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
+                components.html(html350, height=min(120 + 28*len(df350), 800), scrolling=True)

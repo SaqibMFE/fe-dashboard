@@ -10,6 +10,15 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
+# --- define the BYTES-based loader helper (GLOBAL scope) ---
+@st.cache_data(show_spinner=False)
+def load_per_driver_from_bytes(uploaded_bytes: bytes):
+    """
+    Read an uploaded Excel (bytes) into per-driver blocks; cached by file content.
+    Always call this with fp1_file.getvalue() or fp2_file.getvalue().
+    """
+    return read_outing_table_blocks(BytesIO(uploaded_bytes))
+
 
 # --------------------------------------------------------------
 # Streamlit page config

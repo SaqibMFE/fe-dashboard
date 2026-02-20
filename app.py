@@ -181,7 +181,7 @@ with tab2:
                 TEAM_COLOURS_2SHADE,
                 f"{session_choice} — Run/Wait Profile"
             )
-            st.plotly_chart(fig, width=True)
+            st.plotly_chart(fig, use_container_width=True)
 
 
 # --------------------------------------------------------------

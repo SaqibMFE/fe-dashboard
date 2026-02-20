@@ -71,7 +71,6 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
         band = "#F2F4F7" if i % 2 == 0 else "white"
         rib_color = DRIVER_COLOUR.get(str(r["Driver"]), "#888")
         best_str = f"{float(r['BestLap_s']):.3f}" if pd.notna(r["BestLap_s"]) else ""
-
         rows.append(f"""
             <tr style="background:{band}; border-left:6px solid {rib_color};">
                 <td style="text-align:right; padding:6px 10px;">{i+1}</td>

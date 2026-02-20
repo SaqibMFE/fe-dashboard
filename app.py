@@ -37,11 +37,14 @@ show_350 = st.sidebar.checkbox("Show 350 kW", True)
 # --------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------
-def load_per_driver(uploaded_file):
-    """Load outing table into per-driver blocks."""
-    if uploaded_file is None:
-        return None
-    return read_outing_table_blocks(BytesIO(uploaded_file.read()))
+from io import BytesIO
+import streamlit as st
+from fe_core.ingest import read_outing_table_blocks
+
+@st.cache_data(show_spinner=False)
+def load_per_driver(uploaded_bytes: bytes):
+    """Read an uploaded Excel (bytes) into per-driver blocks; cached by file content."""
+    return read_outing_table_blocks(BytesIO(uploaded_bytes))
 
 
 def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:

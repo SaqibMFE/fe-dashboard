@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from pathlib import Path
 from io import BytesIO
 
 from fe_core.colors import TEAM_MAP, DRIVER_COLOUR
@@ -9,15 +8,6 @@ from fe_core.runs import compute_runs_waits
 from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
-
-# --- define the BYTES-based loader helper (GLOBAL scope) ---
-@st.cache_data(show_spinner=False)
-def load_per_driver_from_bytes(uploaded_bytes: bytes):
-    """
-    Read an uploaded Excel (bytes) into per-driver blocks; cached by file content.
-    Always call this with fp1_file.getvalue() or fp2_file.getvalue().
-    """
-    return read_outing_table_blocks(BytesIO(uploaded_bytes))
 
 
 # --------------------------------------------------------------
@@ -33,6 +23,18 @@ st.title("🏁 Formula E Engineering Dashboard")
 
 
 # --------------------------------------------------------------
+# Cached BYTES-based loader (GLOBAL scope)
+# --------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def load_per_driver_from_bytes(uploaded_bytes: bytes):
+    """
+    Read an uploaded Excel (bytes) into per-driver blocks; cached by file content.
+    Always call this with fp1_file.getvalue() or fp2_file.getvalue().
+    """
+    return read_outing_table_blocks(BytesIO(uploaded_bytes))
+
+
+# --------------------------------------------------------------
 # Sidebar: Upload FP1 / FP2 files
 # --------------------------------------------------------------
 st.sidebar.header("Upload OutingTables")
@@ -44,18 +46,8 @@ show_350 = st.sidebar.checkbox("Show 350 kW", True)
 
 
 # --------------------------------------------------------------
-# Helpers
+# Helper for A+ table with team-colour ribbons
 # --------------------------------------------------------------
-from io import BytesIO
-import streamlit as st
-from fe_core.ingest import read_outing_table_blocks
-
-@st.cache_data(show_spinner=False)
-def load_per_driver(uploaded_bytes: bytes):
-    """Read an uploaded Excel (bytes) into per-driver blocks; cached by file content."""
-    return read_outing_table_blocks(BytesIO(uploaded_bytes))
-
-
 def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
     """HTML table in A+ style with team-coloured left ribbons."""
     rows = []
@@ -64,32 +56,33 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
         {title}
     </h3>
     <table style="font-family:Segoe UI; font-size:15px; border-collapse:collapse; width:100%;">
-    <thead style="background:#001F3F; color:white; font-weight:600;">
-        <tr>
-            <th style="padding:8px 10px; text-align:right;">#</th>
-            <th style="padding:8px 10px; text-align:left;">Driver</th>
-            <th style="padding:8px 10px; text-align:right;">Best Lap (s)</th>
-            <th style="padding:8px 10px; text-align:left;">Sequence</th>
-        </tr>
-    </thead>
-    <tbody>
+        <thead style="background:#001F3F; color:white; font-weight:600;">
+            <tr>
+                <th style="padding:8px 10px; text-align:right;">#</th>
+                <th style="padding:8px 10px; text-align:left;">Driver</th>
+                <th style="padding:8px 10px; text-align:right;">Best Lap (s)</th>
+                <th style="padding:8px 10px; text-align:left;">Sequence</th>
+            </tr>
+        </thead>
+        <tbody>
     """)
 
     for i, r in df.iterrows():
         band = "#F2F4F7" if i % 2 == 0 else "white"
-        rib_color = DRIVER_COLOUR.get(r["Driver"], "#888")
+        rib_color = DRIVER_COLOUR.get(str(r["Driver"]), "#888")
+        best_str = f"{float(r['BestLap_s']):.3f}" if pd.notna(r["BestLap_s"]) else ""
 
         rows.append(f"""
-        <tr style="background:{band}; border-left:6px solid {rib_color};">
-            <td style="text-align:right; padding:6px 10px;">{i+1}</td>
-            <td style="padding:6px 10px;"><b>{r['Driver']}</b></td>
-            <td style="text-align:right; padding:6px 10px;">
-                <span style="background:#DFF0D8; padding:2px 6px; border-radius:4px;">
-                    <b>{float(r['BestLap_s']):.3f}</b>
-                </span>
-            </td>
-            <td style="padding:6px 10px;">{r['Sequence']}</td>
-        </tr>
+            <tr style="background:{band}; border-left:6px solid {rib_color};">
+                <td style="text-align:right; padding:6px 10px;">{i+1}</td>
+                <td style="padding:6px 10px;"><b>{r['Driver']}</b></td>
+                <td style="text-align:right; padding:6px 10px;">
+                    <span style="background:#DFF0D8; padding:2px 6px; border-radius:4px;">
+                        <b>{best_str}</b>
+                    </span>
+                </td>
+                <td style="padding:6px 10px;">{r['Sequence']}</td>
+            </tr>
         """)
 
     rows.append("</tbody></table>")
@@ -147,42 +140,48 @@ with tab2:
     if not file:
         st.warning(f"Upload {session_choice} file to view.")
     else:
-        per_blocks = load_per_driver_from_bytes(file.getvalue()) 
+        try:
+            per_blocks = load_per_driver_from_bytes(file.getvalue())
+        except Exception as e:
+            st.error(f"Could not read {session_choice}. Make sure it is a valid .xlsx file.")
+            st.exception(e)
+            per_blocks = None
 
-        per_struct = {}
-        for drv, df in per_blocks.items():
-            runs, waits = compute_runs_waits(df)
-            set_no, labels = label_sets_with_numbers_strict(runs)
-            per_struct[drv] = {
-                "runs": runs,
-                "waits": waits,
-                "run_durs": [(r["end_tod"] - r["start_tod"]) / 60.0 for r in runs],
-                "wait_durs": [(w["end_tod"] - w["start_tod"]) / 60.0 for w in waits],
-                "tyre_labels": labels,
-                "tyre_set_numbers": set_no
+        if per_blocks:
+            per_struct = {}
+            for drv, df in per_blocks.items():
+                runs, waits = compute_runs_waits(df)
+                set_no, labels = label_sets_with_numbers_strict(runs)
+                per_struct[drv] = {
+                    "runs": runs,
+                    "waits": waits,
+                    "run_durs": [(r["end_tod"] - r["start_tod"]) / 60.0 for r in runs],
+                    "wait_durs": [(w["end_tod"] - w["start_tod"]) / 60.0 for w in waits],
+                    "tyre_labels": labels,
+                    "tyre_set_numbers": set_no
+                }
+
+            # Team colours (two shades)
+            TEAM_COLOURS_2SHADE = {
+                'Porsche':  ('#6A0DAD', '#A666D6'),
+                'Jaguar':   ('#808080', '#B0B0B0'),
+                'Nissan':   ('#FF66B2', '#FF99CC'),
+                'Mahindra': ('#D72638', '#F15A5A'),
+                'DS':       ('#C5A100', '#E0C440'),
+                'Andretti': ('#66CCFF', '#99DDFF'),
+                'Citroen':  ('#00AEEF', '#80D9FF'),
+                'Envision': ('#00A650', '#66CDAA'),
+                'Kiro':     ('#8B4513', '#CD853F'),
+                'Lola':     ('#FFD700', '#FFE866'),
             }
 
-        # Team colours (two shades)
-        TEAM_COLOURS_2SHADE = {
-            'Porsche':  ('#6A0DAD','#A666D6'),
-            'Jaguar':   ('#808080','#B0B0B0'),
-            'Nissan':   ('#FF66B2','#FF99CC'),
-            'Mahindra': ('#D72638','#F15A5A'),
-            'DS':       ('#C5A100','#E0C440'),
-            'Andretti': ('#66CCFF','#99DDFF'),
-            'Citroen':  ('#00AEEF','#80D9FF'),
-            'Envision': ('#00A650','#66CDAA'),
-            'Kiro':     ('#8B4513','#CD853F'),
-            'Lola':     ('#FFD700','#FFE866'),
-        }
-
-        fig = runwait_figure(
-            per_struct,
-            TEAM_MAP,
-            TEAM_COLOURS_2SHADE,
-            f"{session_choice} — Run/Wait Profile"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+            fig = runwait_figure(
+                per_struct,
+                TEAM_MAP,
+                TEAM_COLOURS_2SHADE,
+                f"{session_choice} — Run/Wait Profile"
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 
 # --------------------------------------------------------------
@@ -197,17 +196,28 @@ with tab3:
             st.info(f"Upload {sess} file.")
             continue
 
-        per_blocks = load_per_driver(file)
+        try:
+            per_blocks = load_per_driver_from_bytes(file.getvalue())
+        except Exception as e:
+            st.error(f"{sess} load failed. Please upload a valid .xlsx.")
+            st.exception(e)
+            continue
+
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300, 350))
 
         colA, colB = st.columns(2)
-
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
             if not df300.empty:
-                colA.markdown(render_table_with_ribbons(df300, f"{sess} — 300 kW"), unsafe_allow_html=True)
+                colA.markdown(
+                    render_table_with_ribbons(df300, f"{sess} — 300 kW"),
+                    unsafe_allow_html=True
+                )
 
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
             if not df350.empty:
-                colB.markdown(render_table_with_ribbons(df350, f"{sess} — 350 kW"), unsafe_allow_html=True)
+                colB.markdown(
+                    render_table_with_ribbons(df350, f"{sess} — 350 kW"),
+                    unsafe_allow_html=True
+                )

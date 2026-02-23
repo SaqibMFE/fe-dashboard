@@ -66,11 +66,23 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     invalid = {"NAN","NONE","","-"}
     counted = long_df[~long_df["Time_str"].isin(invalid)].copy()
 
-    # SetKey builder
+    # SetKey builder (SAFE)
     def set_key(r):
-        tyres = [r["FL"],r["FR"],r["RL"],r["RR"]]
-        tyres = [t for t in tyres if str(t).lower()!="nan"]
-        return "{"+",".join(sorted(tyres))+"}"
+    raw = [r["FL"], r["FR"], r["RL"], r["RR"]]
+
+    tyres = []
+    for t in raw:
+        if t is None:
+            continue
+        t = str(t).strip()
+        if t == "" or t.lower() == "nan":
+            continue
+        tyres.append(t)
+
+    if not tyres:
+        return "{Unknown}"
+
+    return "{" + ",".join(sorted(tyres)) + "}"
 
     counted["SetKey"] = counted.apply(set_key, axis=1)
     counted["order_idx"] = counted.groupby("Driver").cumcount()

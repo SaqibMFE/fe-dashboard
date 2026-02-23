@@ -68,21 +68,21 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
 
     # SetKey builder (SAFE)
     def set_key(r):
-    raw = [r["FL"], r["FR"], r["RL"], r["RR"]]
+        raw = [r["FL"], r["FR"], r["RL"], r["RR"]]
 
-    tyres = []
-    for t in raw:
-        if t is None:
-            continue
-        t = str(t).strip()
-        if t == "" or t.lower() == "nan":
-            continue
-        tyres.append(t)
+        tyres = []
+        for t in raw:
+            if t is None:
+                continue
+            t = str(t).strip()
+            if t == "" or t.lower() == "nan":
+                continue
+            tyres.append(t)
 
-    if not tyres:
-        return "{Unknown}"
+        if not tyres:
+            return "{Unknown}"
 
-    return "{" + ",".join(sorted(tyres)) + "}"
+        return "{" + ",".join(sorted(tyres)) + "}"
 
     counted["SetKey"] = counted.apply(set_key, axis=1)
     counted["order_idx"] = counted.groupby("Driver").cumcount()

@@ -438,6 +438,8 @@ with tab2:
     else:
         st.info("Upload both FP1 and FP2 to view tyre‑set usage chart.")
 
+    st.write("DEBUG → TEAM_MAP:", TEAM_MAP)
+    st.write("DEBUG → DRIVER_COLOUR:", DRIVER_COLOUR)
 
 # ============================================================
 #  TAB 3 — Fast-Lap Sequences

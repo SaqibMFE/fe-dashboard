@@ -354,4 +354,3 @@ with tab3:
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
                 components.html(html350, height=min(120 + 28 * len(df350), 800), scrolling=True)
-

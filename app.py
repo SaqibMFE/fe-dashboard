@@ -11,6 +11,109 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
+import matplotlib.pyplot as plt
+from io import BytesIO
+
+def generate_tyreset_plot(fp1_bytes: bytes, fp2_bytes: bytes):
+    """
+    Returns PNG bytes for the FP1+FP2 tyre‑set laps chart.
+    Uses the same logic as the script we executed earlier.
+    """
+    import pandas as pd
+    import numpy as np
+
+    # --------------------------
+    # Internal reader (same logic)
+    # --------------------------
+    def read_outing_table_bytes(data: bytes) -> pd.DataFrame:
+        dfw = pd.read_excel(BytesIO(data), engine="openpyxl")
+        driver_row_idx = 1
+        data_start_idx = 3
+        lap_col = dfw.columns[0]
+
+        drivers = []
+        for j in range(1, dfw.shape[1]):
+            name = dfw.iat[driver_row_idx, j]
+            if pd.notna(name):
+                drivers.append((str(name).strip(), j))
+
+        records = []
+        for drv, j in drivers:
+            block_cols = dfw.columns[j:j+10]
+            cols = [lap_col] + list(block_cols)
+            block = dfw.loc[data_start_idx:, cols].copy()
+            if block.empty:
+                continue
+            out_cols = ["Lap","Time","S1PM","S2PM","S3PM","FL","FR","RL","RR","Energy","TOD"]
+            block = block.iloc[:, :len(out_cols)]
+            block.columns = out_cols
+            block["Driver"] = drv
+            records.append(block)
+
+        return pd.concat(records, ignore_index=True)
+
+    # --------------------------
+    # Build FP1+FP2 long DF
+    # --------------------------
+    fp1 = read_outing_table_bytes(fp1_bytes)
+    fp1["Session"] = "FP1"
+    fp2 = read_outing_table_bytes(fp2_bytes)
+    fp2["Session"] = "FP2"
+    long_df = pd.concat([fp1, fp2], ignore_index=True)
+
+    # Counting rule
+    long_df["Time_str"] = long_df["Time"].astype(str).str.upper().str.strip()
+    invalid = {"NAN","NONE","","-"}
+    counted = long_df[~long_df["Time_str"].isin(invalid)].copy()
+
+    # SetKey builder
+    def set_key(r):
+        tyres = [r["FL"],r["FR"],r["RL"],r["RR"]]
+        tyres = [t for t in tyres if str(t).lower()!="nan"]
+        return "{"+",".join(sorted(tyres))+"}"
+
+    counted["SetKey"] = counted.apply(set_key, axis=1)
+    counted["order_idx"] = counted.groupby("Driver").cumcount()
+    oc = counted.groupby(["Driver","SetKey"])["order_idx"].min().reset_index()
+    oc = oc.sort_values(["Driver","order_idx"])
+    oc["SetNo"] = oc.groupby("Driver").cumcount()+1
+    map_set = {(r.Driver,r.SetKey):r.SetNo for r in oc.itertuples()}
+    counted["SetNo"] = counted.apply(lambda r: map_set[(r["Driver"],r["SetKey"])], axis=1)
+
+    agg = counted.groupby(["Driver","SetNo"]).size().reset_index(name="Laps")
+    totals = agg.groupby("Driver")["Laps"].sum().reset_index(name="Total")
+    agg = agg.merge(totals, on="Driver")
+    agg = agg.sort_values(["Total","Driver"], ascending=[False,True])
+
+    pivot = agg.pivot(index="Driver", columns="SetNo", values="Laps").fillna(0)
+
+    # --------------------------
+    # Plot build
+    # --------------------------
+    fig, ax = plt.subplots(figsize=(14, 8))
+    inner_height = 0.4
+    offsets = [-0.2, +0.2] if pivot.shape[1] == 2 else np.linspace(-0.3,0.3,pivot.shape[1])
+
+    for y, drv in enumerate(pivot.index):
+        for off, set_no in zip(offsets, pivot.columns):
+            v = pivot.loc[drv, set_no]
+            if v > 0:
+                ax.barh(y+off, v, height=0.18)
+                ax.text(v+0.3, y+off, f"Set {set_no} — {int(v)} laps", va="center")
+
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index)
+    ax.set_title("FP1+FP2 Tyre Set Laps per Driver")
+    ax.set_xlabel("Laps")
+    ax.invert_yaxis()
+    fig.tight_layout()
+
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
 
 # --------------------------------------------------------------
 # Streamlit page config
@@ -184,6 +287,21 @@ with tab2:
             )
             st.plotly_chart(fig, use_container_width=True)
 
+# ------------------------------------------------------
+# FP1+FP2 Tyre‑Set Laps Plot
+# ------------------------------------------------------
+if fp1_file and fp2_file:
+    st.subheader("FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)")
+
+    try:
+        png_bytes = generate_tyreset_plot(fp1_file.getvalue(), fp2_file.getvalue())
+        st.image(png_bytes, caption="FP1+FP2 Tyre‑Set Lap Chart", use_column_width=True)
+    except Exception as e:
+        st.error("Failed generating tyre-set plot.")
+        st.exception(e)
+else:
+    st.info("Upload both FP1 and FP2 to view tyre‑set lap chart.")
+``
 
 # --------------------------------------------------------------
 # TAB 3 — Fast-Lap Sequences

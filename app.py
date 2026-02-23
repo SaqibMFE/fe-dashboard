@@ -178,8 +178,8 @@ show_350 = st.sidebar.checkbox("Show 350 kW", True)
 # --------------------------------------------------------------
 # Helper for custom HTML tables
 # --------------------------------------------------------------
-def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
 
+def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
     rows = []
     rows.append(f"""
     <h3 style="font-family:Segoe UI; color:#001F3F; margin:12px 0 6px 0;">
@@ -206,3 +206,14 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
             <tr style="background:{band}; border-left:6px solid {rib_color};">
                 <td style="text-align:right; padding:6px 10px;">{i+1}</td>
                 <td style="padding:6px 10px;"><b>{r['Driver']}</b></td>
+                <td style="text-align:right; padding:6px 10px;">
+                    <span style="background:#DFF0D8; padding:2px 6px; border-radius:4px;">
+                        <b>{best_str}</b>
+                    </span>
+                </td>
+                <td style="padding:6px 10px;">{r['Sequence']}</td>
+            </tr>
+        """)
+
+    rows.append("</tbody></table>")
+    return "\n".join(rows)

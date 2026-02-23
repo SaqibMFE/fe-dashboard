@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from io import BytesIO
 import plotly.graph_objects as go
-import streamlit.components.v1 as components  # <-- ADD THIS LINE
+import streamlit.components.v1 as components
 
 from fe_core.colors import TEAM_MAP, DRIVER_COLOUR
 from fe_core.ingest import read_outing_table_blocks
@@ -66,7 +66,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     invalid = {"NAN", "NONE", "", "-"}
     counted = long_df[~long_df["Time_str"].isin(invalid)].copy()
 
-    # SetKey builder (SAFE)
+    # SAFE SetKey builder
     def set_key(r):
         raw = [r["FL"], r["FR"], r["RL"], r["RR"]]
         tyres = []
@@ -108,7 +108,6 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
 
-    # Grouped horizontal bars (auto handles 1..N sets)
     for set_no in set_numbers:
         fig.add_trace(
             go.Bar(
@@ -126,7 +125,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
         barmode="group",
         title="FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)",
         xaxis_title="Laps",
-        yaxis_autorange="reversed",  # Drivers sorted top-to-bottom
+        yaxis_autorange="reversed",
         height=800,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(t=60, r=20, b=40, l=80),
@@ -152,10 +151,6 @@ st.title("🏁 Formula E Engineering Dashboard")
 # --------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_per_driver_from_bytes(uploaded_bytes: bytes):
-    """
-    Read an uploaded Excel (bytes) into per-driver blocks; cached by file content.
-    Always call this with fp1_file.getvalue() or fp2_file.getvalue().
-    """
     return read_outing_table_blocks(BytesIO(uploaded_bytes))
 
 
@@ -174,7 +169,6 @@ show_350 = st.sidebar.checkbox("Show 350 kW", True)
 # Helper for A+ table with team-colour ribbons
 # --------------------------------------------------------------
 def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
-    """HTML table in A+ style with team-coloured left ribbons."""
     rows = []
     rows.append(f"""
     <h3 style="font-family:Segoe UI; color:#001F3F; margin:12px 0 6px 0;">
@@ -196,6 +190,168 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
         band = "#F2F4F7" if i % 2 == 0 else "white"
         rib_color = DRIVER_COLOUR.get(str(r["Driver"]), "#888")
         best_str = f"{float(r['BestLap_s']):.3f}" if pd.notna(r["BestLap_s"]) else ""
+
         rows.append(f"""
             <tr style="background:{band}; border-left:6px solid {rib_color};">
+                <td style="text-align:right; padding:6px 10px;">{i+1}</td>
+                <td style="padding:6px 10px;"><b>{r['Driver']}</b></td>
+                <td style="text-align:right; padding:6px 10px;">
+                    <span style="background:#DFF0D8; padding:2px 6px; border-radius:4px;">
+                        <b>{best_str}</b>
+                    </span>
+                </td>
+                <td style="padding:6px 10px;">{r['Sequence']}</td>
+            </tr>
+        """)
+
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
+
+
+# --------------------------------------------------------------
+# Tabs
+# --------------------------------------------------------------
+tab1, tab2, tab3 = st.tabs(["Session Overview", "Run/Wait + Tyre Sets", "Fast-Lap Sequences"])
+
+
+# --------------------------------------------------------------
+# TAB 1
+# --------------------------------------------------------------
+with tab1:
+    st.header("Session Overview")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("FP1 Drivers")
+        if fp1_file:
+            try:
+                per1 = load_per_driver_from_bytes(fp1_file.getvalue())
+                st.write(sorted(list(per1.keys())))
+            except Exception as e:
+                st.error("FP1 load failed.")
+                st.exception(e)
+        else:
+            st.info("Upload FP1 file.")
+
+    with col2:
+        st.subheader("FP2 Drivers")
+        if fp2_file:
+            try:
+                per2 = load_per_driver_from_bytes(fp2_file.getvalue())
+                st.write(sorted(list(per2.keys())))
+            except Exception as e:
+                st.error("FP2 load failed.")
+                st.exception(e)
+        else:
+            st.info("Upload FP2 file.")
+
+
+# --------------------------------------------------------------
+# TAB 2
+# --------------------------------------------------------------
+with tab2:
+    st.header("Run/Wait Timeline + Strict Tyre Set Logic")
+
+    session_choice = st.radio("Choose session", ["FP1", "FP2"], horizontal=True)
+    session_file = fp1_file if session_choice == "FP1" else fp2_file
+
+    if not session_file:
+        st.warning(f"Upload {session_choice} file to view.")
+    else:
+        try:
+            per_blocks = load_per_driver_from_bytes(session_file.getvalue())
+        except Exception as e:
+            st.error(f"Could not read {session_choice}.")
+            st.exception(e)
+            per_blocks = None
+
+        if per_blocks:
+            per_struct = {}
+
+            for drv, df in per_blocks.items():
+                runs, waits = compute_runs_waits(df)
+                set_no, labels = label_sets_with_numbers_strict(runs)
+
+                per_struct[drv] = {
+                    "runs": runs,
+                    "waits": waits,
+                    "run_durs": [(r["end_tod"] - r["start_tod"]) / 60.0 for r in runs],
+                    "wait_durs": [(w["end_tod"] - w["start_tod"]) / 60.0 for w in waits],
+                    "tyre_labels": labels,
+                    "tyre_set_numbers": set_no,
+                }
+
+            TEAM_COLOURS_2SHADE = {
+                "Porsche": ("#6A0DAD", "#A666D6"),
+                "Jaguar": ("#808080", "#B0B0B0"),
+                "Nissan": ("#FF66B2", "#FF99CC"),
+                "Mahindra": ("#D72638", "#F15A5A"),
+                "DS": ("#C5A100", "#E0C440"),
+                "Andretti": ("#66CCFF", "#99DDFF"),
+                "Citroen": ("#00AEEF", "#80D9FF"),
+                "Envision": ("#00A650", "#66CDAA"),
+                "Kiro": ("#8B4513", "#CD853F"),
+                "Lola": ("#FFD700", "#FFE866"),
+            }
+
+            fig = runwait_figure(
+                per_struct,
+                TEAM_MAP,
+                TEAM_COLOURS_2SHADE,
+                f"{session_choice} — Run/Wait Profile",
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ------------------------------------------
+    # FP1 + FP2 Tyre‑Set Plot
+    # ------------------------------------------
+    if fp1_file is not None and fp2_file is not None:
+        st.subheader("FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)")
+        try:
+            fig_ts = generate_tyreset_plot_plotly(fp1_file.getvalue(), fp2_file.getvalue())
+            st.plotly_chart(fig_ts, use_container_width=True)
+        except Exception as e:
+            st.error("Failed generating tyre-set plot.")
+            st.exception(e)
+    else:
+        st.info("Upload both FP1 and FP2 to view tyre‑set lap chart.")
+
+
+# --------------------------------------------------------------
+# TAB 3
+# --------------------------------------------------------------
+with tab3:
+    st.header("Fast-Lap Sequences (O/B/P)")
+
+    for sess, file in (("FP1", fp1_file), ("FP2", fp2_file)):
+        st.subheader(sess)
+
+        if not file:
+            st.info(f"Upload {sess} file.")
+            continue
+
+        try:
+            per_blocks = load_per_driver_from_bytes(file.getvalue())
+        except Exception as e:
+            st.error(f"{sess} load failed.")
+            st.exception(e)
+            continue
+
+        fast_results = compute_fastlap_sequences(per_blocks, powers=(300, 350))
+
+        colA, colB = st.columns(2)
+
+        if show_300:
+            df300 = sequences_to_table(fast_results, 300)
+            if not df300.empty:
+                html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
+                components.html(html300, height=min(120 + 28 * len(df300), 800), scrolling=True)
+
+        if show_350:
+            df350 = sequences_to_table(fast_results, 350)
+            if not df350.empty:
+                html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
+                components.html(html350, height=min(120 + 28 * len(df350), 800), scrolling=True)
 

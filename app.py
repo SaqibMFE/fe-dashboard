@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from io import BytesIO
-
+import plotly.graph_objects as go
 import streamlit.components.v1 as components  # <-- ADD THIS LINE
 
 from fe_core.colors import TEAM_MAP, DRIVER_COLOUR
@@ -11,11 +12,10 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
-import plotly.graph_objects as go
-from io import BytesIO
-import pandas as pd
-import numpy as np
 
+# --------------------------------------------------------------
+# Plotly FP1+FP2 Tyre-Set Laps Chart
+# --------------------------------------------------------------
 def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     """
     Returns a Plotly figure for the FP1+FP2 tyre-set laps chart.
@@ -44,7 +44,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
             block = dfw.loc[data_start_idx:, cols].copy()
             if block.empty:
                 continue
-            out_cols = ["Lap","Time","S1PM","S2PM","S3PM","FL","FR","RL","RR","Energy","TOD"]
+            out_cols = ["Lap", "Time", "S1PM", "S2PM", "S3PM", "FL", "FR", "RL", "RR", "Energy", "TOD"]
             block = block.iloc[:, :len(out_cols)]
             block.columns = out_cols
             block["Driver"] = drv
@@ -63,13 +63,12 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
 
     # Counting rule
     long_df["Time_str"] = long_df["Time"].astype(str).str.upper().str.strip()
-    invalid = {"NAN","NONE","","-"}
+    invalid = {"NAN", "NONE", "", "-"}
     counted = long_df[~long_df["Time_str"].isin(invalid)].copy()
 
     # SetKey builder (SAFE)
     def set_key(r):
         raw = [r["FL"], r["FR"], r["RL"], r["RR"]]
-
         tyres = []
         for t in raw:
             if t is None:
@@ -78,24 +77,26 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
             if t == "" or t.lower() == "nan":
                 continue
             tyres.append(t)
-
         if not tyres:
             return "{Unknown}"
-
         return "{" + ",".join(sorted(tyres)) + "}"
 
     counted["SetKey"] = counted.apply(set_key, axis=1)
     counted["order_idx"] = counted.groupby("Driver").cumcount()
-    oc = counted.groupby(["Driver","SetKey"])["order_idx"].min().reset_index()
-    oc = oc.sort_values(["Driver","order_idx"])
-    oc["SetNo"] = oc.groupby("Driver").cumcount()+1
-    map_set = {(r.Driver,r.SetKey):r.SetNo for r in oc.itertuples()}
-    counted["SetNo"] = counted.apply(lambda r: map_set[(r["Driver"],r["SetKey"])], axis=1)
 
-    agg = counted.groupby(["Driver","SetNo"]).size().reset_index(name="Laps")
+    oc = (
+        counted.groupby(["Driver", "SetKey"])["order_idx"]
+        .min()
+        .reset_index()
+        .sort_values(["Driver", "order_idx"])
+    )
+    oc["SetNo"] = oc.groupby("Driver").cumcount() + 1
+    map_set = {(r.Driver, r.SetKey): r.SetNo for r in oc.itertuples()}
+    counted["SetNo"] = counted.apply(lambda r: map_set[(r["Driver"], r["SetKey"])], axis=1)
+
+    agg = counted.groupby(["Driver", "SetNo"]).size().reset_index(name="Laps")
     totals = agg.groupby("Driver")["Laps"].sum().reset_index(name="Total")
-    agg = agg.merge(totals, on="Driver")
-    agg = agg.sort_values(["Total","Driver"], ascending=[False,True])
+    agg = agg.merge(totals, on="Driver").sort_values(["Total", "Driver"], ascending=[False, True])
 
     pivot = agg.pivot(index="Driver", columns="SetNo", values="Laps").fillna(0)
 
@@ -107,10 +108,8 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
 
-    # Offset for grouped bars
-    offsets = np.linspace(-0.25, +0.25, len(set_numbers))
-
-    for off, set_no in zip(offsets, set_numbers):
+    # Grouped horizontal bars (auto handles 1..N sets)
+    for set_no in set_numbers:
         fig.add_trace(
             go.Bar(
                 x=pivot[set_no],
@@ -118,9 +117,8 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
                 name=f"Set {set_no}",
                 orientation="h",
                 offsetgroup=str(set_no),
-                marker=dict(color=None),
-                text=[f"Set {set_no} — {int(v)} laps" if v>0 else "" for v in pivot[set_no]],
-                textposition="outside"
+                text=[f"Set {set_no} — {int(v)} laps" if v > 0 else "" for v in pivot[set_no]],
+                textposition="outside",
             )
         )
 
@@ -128,8 +126,10 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
         barmode="group",
         title="FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)",
         xaxis_title="Laps",
-        yaxis_autorange="reversed",
-        height=800
+        yaxis_autorange="reversed",  # Drivers sorted top-to-bottom
+        height=800,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=60, r=20, b=40, l=80),
     )
 
     return fig
@@ -198,165 +198,4 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
         best_str = f"{float(r['BestLap_s']):.3f}" if pd.notna(r["BestLap_s"]) else ""
         rows.append(f"""
             <tr style="background:{band}; border-left:6px solid {rib_color};">
-                <td style="text-align:right; padding:6px 10px;">{i+1}</td>
-                <td style="padding:6px 10px;"><b>{r['Driver']}</b></td>
-                <td style="text-align:right; padding:6px 10px;">
-                    <span style="background:#DFF0D8; padding:2px 6px; border-radius:4px;">
-                        <b>{best_str}</b>
-                    </span>
-                </td>
-                <td style="padding:6px 10px;">{r['Sequence']}</td>
-            </tr>
-        """)
 
-    rows.append("</tbody></table>")
-    return "\n".join(rows)
-
-
-# --------------------------------------------------------------
-# Tabs
-# --------------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["Session Overview", "Run/Wait + Tyre Sets", "Fast-Lap Sequences"])
-
-
-# --------------------------------------------------------------
-# TAB 1 — Session Overview
-# --------------------------------------------------------------
-with tab1:
-    st.header("Session Overview")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("FP1 Drivers")
-        if fp1_file:
-            try:
-                per1 = load_per_driver_from_bytes(fp1_file.getvalue())
-                st.write(sorted(list(per1.keys())))
-            except Exception as e:
-                st.error("FP1 load failed. Please upload a valid .xlsx.")
-                st.exception(e)
-        else:
-            st.info("Upload FP1 file.")
-
-    with col2:
-        st.subheader("FP2 Drivers")
-        if fp2_file:
-            try:
-                per2 = load_per_driver_from_bytes(fp2_file.getvalue())
-                st.write(sorted(list(per2.keys())))
-            except Exception as e:
-                st.error("FP2 load failed. Please upload a valid .xlsx.")
-                st.exception(e)
-        else:
-            st.info("Upload FP2 file.")
-
-
-# --------------------------------------------------------------
-# TAB 2 — Run/Wait + Tyre Sets
-# --------------------------------------------------------------
-with tab2:
-    st.header("Run/Wait Timeline + Strict Tyre Set Logic")
-
-    session_choice = st.radio("Choose session", ["FP1", "FP2"], horizontal=True)
-    file = fp1_file if session_choice == "FP1" else fp2_file
-
-    if not file:
-        st.warning(f"Upload {session_choice} file to view.")
-    else:
-        try:
-            per_blocks = load_per_driver_from_bytes(file.getvalue())
-        except Exception as e:
-            st.error(f"Could not read {session_choice}. Make sure it is a valid .xlsx file.")
-            st.exception(e)
-            per_blocks = None
-
-        if per_blocks:
-            per_struct = {}
-            for drv, df in per_blocks.items():
-                runs, waits = compute_runs_waits(df)
-                set_no, labels = label_sets_with_numbers_strict(runs)
-                per_struct[drv] = {
-                    "runs": runs,
-                    "waits": waits,
-                    "run_durs": [(r["end_tod"] - r["start_tod"]) / 60.0 for r in runs],
-                    "wait_durs": [(w["end_tod"] - w["start_tod"]) / 60.0 for w in waits],
-                    "tyre_labels": labels,
-                    "tyre_set_numbers": set_no
-                }
-
-            # Team colours (two shades)
-            TEAM_COLOURS_2SHADE = {
-                'Porsche':  ('#6A0DAD', '#A666D6'),
-                'Jaguar':   ('#808080', '#B0B0B0'),
-                'Nissan':   ('#FF66B2', '#FF99CC'),
-                'Mahindra': ('#D72638', '#F15A5A'),
-                'DS':       ('#C5A100', '#E0C440'),
-                'Andretti': ('#66CCFF', '#99DDFF'),
-                'Citroen':  ('#00AEEF', '#80D9FF'),
-                'Envision': ('#00A650', '#66CDAA'),
-                'Kiro':     ('#8B4513', '#CD853F'),
-                'Lola':     ('#FFD700', '#FFE866'),
-            }
-
-            fig = runwait_figure(
-                per_struct,
-                TEAM_MAP,
-                TEAM_COLOURS_2SHADE,
-                f"{session_choice} — Run/Wait Profile"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-# ------------------------------------------------------
-# FP1+FP2 Tyre‑Set Laps Plot (Plotly version)
-# ------------------------------------------------------
-if fp1_file is not None and fp2_file is not None:
-    st.subheader("FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)")
-
-    try:
-        fig_ts = generate_tyreset_plot_plotly(fp1_file.getvalue(), fp2_file.getvalue())
-        st.plotly_chart(fig_ts, use_container_width=True)
-    except Exception as e:
-        st.error("Failed generating tyre-set plot.")
-        st.exception(e)
-else:
-    st.info("Upload both FP1 and FP2 to view tyre‑set lap chart.")
-
-# --------------------------------------------------------------
-# TAB 3 — Fast-Lap Sequences
-# --------------------------------------------------------------
-# --------------------------------------------------------------
-# TAB 3 — Fast-Lap Sequences
-# --------------------------------------------------------------
-with tab3:
-    st.header("Fast-Lap Sequences (O/B/P)")
-
-    for sess, file in (("FP1", fp1_file), ("FP2", fp2_file)):
-        st.subheader(sess)
-        if not file:
-            st.info(f"Upload {sess} file.")
-            continue
-
-        try:
-            per_blocks = load_per_driver_from_bytes(file.getvalue())
-        except Exception as e:
-            st.error(f"{sess} load failed. Please upload a valid .xlsx.")
-            st.exception(e)
-            continue
-
-        fast_results = compute_fastlap_sequences(per_blocks, powers=(300, 350))
-
-        # Two columns: 300 kW, 350 kW
-        colA, colB = st.columns(2)
-
-        if show_300:
-            df300 = sequences_to_table(fast_results, 300)
-            if not df300.empty:
-                html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
-                components.html(html300, height=min(120 + 28*len(df300), 800), scrolling=True)
-
-        if show_350:
-            df350 = sequences_to_table(fast_results, 350)
-            if not df350.empty:
-                html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
-                components.html(html350, height=min(120 + 28*len(df350), 800), scrolling=True)

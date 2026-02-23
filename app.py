@@ -122,6 +122,11 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     pivot = agg.pivot(index="Driver", columns="SetNo",
                       values="Laps").fillna(0)
 
+    # ---- Use DRIVER_COLOUR directly (FE-colour-correct) ----
+    driver_colours = {}
+    for drv in pivot.index:
+        driver_colours[drv] = DRIVER_COLOUR.get(drv, "#888888")
+    
     # ---- Build driver colours from TEAM_MAP (light/dark per team) ----
     driver_colours = {}
     team_to_drivers = {}
@@ -168,6 +173,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     fig = go.Figure()
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
+
 
     for set_no in set_numbers:
         colours = [driver_colours[drv] for drv in drivers]

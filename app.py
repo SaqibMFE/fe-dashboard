@@ -13,6 +13,24 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
+# ---------- colour helpers for team shades ----------
+def lighten(hexcolor, factor=0.35):
+    r = int(hexcolor[1:3], 16)
+    g = int(hexcolor[3:5], 16)
+    b = int(hexcolor[5:7], 16)
+    r = int(r + (255 - r) * factor)
+    g = int(g + (255 - g) * factor)
+    b = int(b + (255 - b) * factor)
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+def darken(hexcolor, factor=0.25):
+    r = int(hexcolor[1:3], 16)
+    g = int(hexcolor[3:5], 16)
+    b = int(hexcolor[5:7], 16)
+    r = int(r * (1 - factor))
+    g = int(g * (1 - factor))
+    b = int(b * (1 - factor))
+    return f"#{r:02X}{g:02X}{b:02X}"
 
 # ============================================================
 #  PLOTLY TYRE-SET PLOT (FP1 + FP2)
@@ -104,12 +122,55 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     pivot = agg.pivot(index="Driver", columns="SetNo",
                       values="Laps").fillna(0)
 
+    # ---- Build driver colours from TEAM_MAP (light/dark per team) ----
+    driver_colours = {}
+    team_to_drivers = {}
+
+    # group drivers by team
+    for drv in pivot.index:
+        team = TEAM_MAP.get(drv)
+        if team:
+            # TEAM_MAP may be a mapping {driver_code: team_name} or {team_name: base_color}
+            team_to_drivers.setdefault(team, []).append(drv)
+
+    # derive base colour for each team; if TEAM_MAP is not colour-bearing, replace with your team->hex mapping
+    # If your TEAM_MAP is like {"Porsche": "#6A0DAD", ...}, keep as-is.
+    # If your TEAM_MAP maps drivers to team names only, create a TEAM_BASE dict and use that instead here.
+    TEAM_BASE = {
+        "Porsche":  "#6A0DAD",
+        "Jaguar":   "#808080",
+        "Nissan":   "#FF69B4",
+        "Mahindra": "#D72638",
+        "DS":       "#C5A100",
+        "Andretti": "#66CCFF",
+        "Citroen":  "#00AEEF",
+        "Envision": "#00A650",
+        "Kiro":     "#8B4513",
+        "Lola":     "#FFD700",
+    }
+
+    for team, dlist in team_to_drivers.items():
+        base = TEAM_BASE.get(team, "#888888")
+        d_sorted = sorted(dlist)
+        if len(d_sorted) == 1:
+            driver_colours[d_sorted[0]] = darken(base, 0.20)
+        else:
+            driver_colours[d_sorted[0]] = lighten(base, 0.35)
+            driver_colours[d_sorted[1]] = darken(base, 0.25)
+            for extra in d_sorted[2:]:
+                driver_colours[extra] = base
+
+    # fallback for any driver without a team match
+    for drv in pivot.index:
+        driver_colours.setdefault(drv, "#888888")
+    
     # ---- Build Plotly Figure ----
     fig = go.Figure()
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
 
     for set_no in set_numbers:
+        colours = [driver_colours[drv] for drv in drivers]
         fig.add_trace(
             go.Bar(
                 x=pivot[set_no],
@@ -117,6 +178,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
                 name=f"Set {set_no}",
                 orientation="h",
                 offsetgroup=str(set_no),
+                marker=dict(color=colours),
                 text=[f"{int(v)} laps" if v > 0 else "" for v in pivot[set_no]],
                 textposition="outside"
             )

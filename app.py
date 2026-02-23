@@ -224,6 +224,8 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
 
+    st.write("DEBUG driver_colours used:", driver_colours)
+    
     for set_no in set_numbers:
         colours = [driver_colours[drv] for drv in drivers]
 
@@ -443,9 +445,6 @@ with tab2:
             st.exception(e)
     else:
         st.info("Upload both FP1 and FP2 to view tyre‑set usage chart.")
-
-    st.write("DEBUG → TEAM_MAP:", TEAM_MAP)
-    st.write("DEBUG → DRIVER_COLOUR:", DRIVER_COLOUR)
 
 # ============================================================
 #  TAB 3 — Fast-Lap Sequences

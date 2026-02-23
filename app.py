@@ -290,7 +290,7 @@ with tab2:
 # ------------------------------------------------------
 # FP1+FP2 Tyre‑Set Laps Plot
 # ------------------------------------------------------
-if fp1_file and fp2_file:
+if fp1_file is not None and fp2_file is not None:
     st.subheader("FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)")
 
     try:
@@ -301,7 +301,6 @@ if fp1_file and fp2_file:
         st.exception(e)
 else:
     st.info("Upload both FP1 and FP2 to view tyre‑set lap chart.")
-``
 
 # --------------------------------------------------------------
 # TAB 3 — Fast-Lap Sequences

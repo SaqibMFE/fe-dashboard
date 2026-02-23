@@ -11,16 +11,16 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from io import BytesIO
+import pandas as pd
+import numpy as np
 
-def generate_tyreset_plot(fp1_bytes: bytes, fp2_bytes: bytes):
+def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     """
-    Returns PNG bytes for the FP1+FP2 tyre‑set laps chart.
-    Uses the same logic as the script we executed earlier.
+    Returns a Plotly figure for the FP1+FP2 tyre-set laps chart.
+    Fully interactive, Streamlit-safe, and does not use matplotlib.
     """
-    import pandas as pd
-    import numpy as np
 
     # --------------------------
     # Internal reader (same logic)
@@ -88,31 +88,39 @@ def generate_tyreset_plot(fp1_bytes: bytes, fp2_bytes: bytes):
     pivot = agg.pivot(index="Driver", columns="SetNo", values="Laps").fillna(0)
 
     # --------------------------
-    # Plot build
+    # Build PLOTLY FIGURE
     # --------------------------
-    fig, ax = plt.subplots(figsize=(14, 8))
-    inner_height = 0.4
-    offsets = [-0.2, +0.2] if pivot.shape[1] == 2 else np.linspace(-0.3,0.3,pivot.shape[1])
+    fig = go.Figure()
 
-    for y, drv in enumerate(pivot.index):
-        for off, set_no in zip(offsets, pivot.columns):
-            v = pivot.loc[drv, set_no]
-            if v > 0:
-                ax.barh(y+off, v, height=0.18)
-                ax.text(v+0.3, y+off, f"Set {set_no} — {int(v)} laps", va="center")
+    set_numbers = pivot.columns.tolist()
+    drivers = pivot.index.tolist()
 
-    ax.set_yticks(range(len(pivot.index)))
-    ax.set_yticklabels(pivot.index)
-    ax.set_title("FP1+FP2 Tyre Set Laps per Driver")
-    ax.set_xlabel("Laps")
-    ax.invert_yaxis()
-    fig.tight_layout()
+    # Offset for grouped bars
+    offsets = np.linspace(-0.25, +0.25, len(set_numbers))
 
-    buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return buf.getvalue()
+    for off, set_no in zip(offsets, set_numbers):
+        fig.add_trace(
+            go.Bar(
+                x=pivot[set_no],
+                y=drivers,
+                name=f"Set {set_no}",
+                orientation="h",
+                offsetgroup=str(set_no),
+                marker=dict(color=None),
+                text=[f"Set {set_no} — {int(v)} laps" if v>0 else "" for v in pivot[set_no]],
+                textposition="outside"
+            )
+        )
+
+    fig.update_layout(
+        barmode="group",
+        title="FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)",
+        xaxis_title="Laps",
+        yaxis_autorange="reversed",
+        height=800
+    )
+
+    return fig
 
 
 # --------------------------------------------------------------
@@ -288,14 +296,14 @@ with tab2:
             st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------
-# FP1+FP2 Tyre‑Set Laps Plot
+# FP1+FP2 Tyre‑Set Laps Plot (Plotly version)
 # ------------------------------------------------------
 if fp1_file is not None and fp2_file is not None:
     st.subheader("FP1 + FP2 — Tyre‑Set Laps per Driver (Option C)")
 
     try:
-        png_bytes = generate_tyreset_plot(fp1_file.getvalue(), fp2_file.getvalue())
-        st.image(png_bytes, caption="FP1+FP2 Tyre‑Set Lap Chart", use_column_width=True)
+        fig_ts = generate_tyreset_plot_plotly(fp1_file.getvalue(), fp2_file.getvalue())
+        st.plotly_chart(fig_ts, use_container_width=True)
     except Exception as e:
         st.error("Failed generating tyre-set plot.")
         st.exception(e)

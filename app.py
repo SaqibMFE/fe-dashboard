@@ -119,13 +119,16 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
         ["Total","Driver"], ascending=[False,True]
     )
 
-    pivot = agg.pivot(index="Driver", columns="SetNo",
-                      values="Laps").fillna(0)
+    pivot = agg.pivot(index="Driver", columns="SetNo", values="Laps").fillna(0)
 
-    # -------- USE FE's DRIVER_COLOUR directly --------
+    # ---- Use FE-core DRIVER_COLOUR directly (correct colours) ----
     driver_colours = {}
     for drv in pivot.index:
         driver_colours[drv] = DRIVER_COLOUR.get(drv, "#888888")
+    
+    st.write("DEBUG INSIDE FUNCTION driver_colours:", driver_colours)
+
+    
     
     # ---- Build FE team-based driver colours ----
     TEAM_BASE = {
@@ -238,7 +241,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
                 offsetgroup=str(set_no),
                 marker=dict(color=colours),
                 text=[f"{int(v)} laps" if v > 0 else "" for v in pivot[set_no]],
-                textposition="outside"
+                textposition="outside",
             )
         )
 

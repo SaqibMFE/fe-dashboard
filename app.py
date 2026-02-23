@@ -13,24 +13,6 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
-# ---------- colour helpers for team shades ----------
-def lighten(hexcolor, factor=0.35):
-    r = int(hexcolor[1:3], 16)
-    g = int(hexcolor[3:5], 16)
-    b = int(hexcolor[5:7], 16)
-    r = int(r + (255 - r) * factor)
-    g = int(g + (255 - g) * factor)
-    b = int(b + (255 - b) * factor)
-    return f"#{r:02X}{g:02X}{b:02X}"
-
-def darken(hexcolor, factor=0.25):
-    r = int(hexcolor[1:3], 16)
-    g = int(hexcolor[3:5], 16)
-    b = int(hexcolor[5:7], 16)
-    r = int(r * (1 - factor))
-    g = int(g * (1 - factor))
-    b = int(b * (1 - factor))
-    return f"#{r:02X}{g:02X}{b:02X}"
 
 # ============================================================
 #  PLOTLY TYRE-SET PLOT (FP1 + FP2)
@@ -54,14 +36,14 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
 
         records = []
         for drv, j in drivers:
-            block_cols = dfw.columns[j:j+10]
+            block_cols = dfw.columns[j:j + 10]
             cols = [lap_col] + list(block_cols)
             block = dfw.loc[data_start_idx:, cols].copy()
             if block.empty:
                 continue
 
-            out_cols = ["Lap","Time","S1PM","S2PM","S3PM",
-                        "FL","FR","RL","RR","Energy","TOD"]
+            out_cols = ["Lap", "Time", "S1PM", "S2PM", "S3PM",
+                        "FL", "FR", "RL", "RR", "Energy", "TOD"]
 
             block = block.iloc[:, :len(out_cols)]
             block.columns = out_cols
@@ -79,7 +61,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
 
     # ---- Counting rule (Option C) ----
     long_df["Time_str"] = long_df["Time"].astype(str).str.upper().str.strip()
-    invalid = {"NAN","NONE","","-"}
+    invalid = {"NAN", "NONE", "", "-"}
     counted = long_df[~long_df["Time_str"].isin(invalid)].copy()
 
     # ---- Build SetKey (safe) ----
@@ -108,127 +90,30 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     )
     oc["SetNo"] = oc.groupby("Driver").cumcount() + 1
     map_set = {(r.Driver, r.SetKey): r.SetNo for r in oc.itertuples()}
+    counted["SetNo"] = counted.apply(lambda r: map_set[(r["Driver"], r["SetKey"])], axis=1)
 
-    counted["SetNo"] = counted.apply(
-        lambda r: map_set[(r["Driver"], r["SetKey"])], axis=1
-    )
-
-    agg = counted.groupby(["Driver","SetNo"]).size().reset_index(name="Laps")
+    # ---- Aggregate ----
+    agg = counted.groupby(["Driver", "SetNo"]).size().reset_index(name="Laps")
     totals = agg.groupby("Driver")["Laps"].sum().reset_index(name="Total")
     agg = agg.merge(totals, on="Driver").sort_values(
         ["Total","Driver"], ascending=[False,True]
     )
 
+    # ---- Driver × set matrix ----
     pivot = agg.pivot(index="Driver", columns="SetNo", values="Laps").fillna(0)
 
-    # ---- Use FE-core DRIVER_COLOUR directly (correct colours) ----
-    driver_colours = {}
-    for drv in pivot.index:
-        driver_colours[drv] = DRIVER_COLOUR.get(drv, "#888888")
-    
-    st.write("DEBUG INSIDE FUNCTION driver_colours:", driver_colours)
+    # ============================================================
+    #  FE-CORE COLOUR LOGIC — THIS FIXES GREY BARS
+    # ============================================================
+    driver_colours = {drv: DRIVER_COLOUR.get(drv, "#888888") for drv in pivot.index}
 
-    
-    
-    # ---- Build FE team-based driver colours ----
-    TEAM_BASE = {
-        "Porsche":  "#6A0DAD",
-        "Jaguar":   "#808080",
-        "Nissan":   "#FF69B4",
-        "Mahindra": "#D72638",
-        "DS":       "#C5A100",
-        "Andretti": "#1F77B4",
-        "Citroen":  "#00AEEF",
-        "Envision": "#00A650",
-        "Kiro":     "#8B4513",
-        "Lola":     "#FFD700",
-    }
-
-    # map drivers → teams (your FE driver-team map)
-    DRIVER_TEAM = {
-        "WEH":"Porsche", "MUE":"Porsche",
-        "EVA":"Jaguar", "DAC":"Jaguar",
-        "ROW":"Nissan","NAT":"Nissan",
-        "DEV":"Mahindra","MOR":"Mahindra",
-        "BAR":"DS","GUE":"DS",
-        "DEN":"Andretti","DRU":"Andretti",
-        "CAS":"Citroen","JEV":"Citroen",
-        "BUE":"Envision","ERI":"Envision",
-        "TIC":"Kiro","MAR":"Kiro",
-        "DIG":"Lola","MAL":"Lola",
-    }
-
-    # Build team→drivers list
-    team_to_drivers = {}
-    for drv in pivot.index:
-        team = DRIVER_TEAM.get(drv)
-        team_to_drivers.setdefault(team, []).append(drv)
-
-    # Now generate driver colours
-    driver_colours = {}
-    for team, drvs in team_to_drivers.items():
-        base = TEAM_BASE[team]
-        drvs_sorted = sorted(drvs)   # alphabetical
-        if len(drvs_sorted) == 1:
-            driver_colours[drvs_sorted[0]] = darken(base, 0.20)
-        else:
-            driver_colours[drvs_sorted[0]] = lighten(base, 0.35)
-            driver_colours[drvs_sorted[1]] = darken(base, 0.25)
-    
-    # ---- Use DRIVER_COLOUR directly (FE-colour-correct) ----
-    driver_colours = {}
-    for drv in pivot.index:
-        driver_colours[drv] = DRIVER_COLOUR.get(drv, "#888888")
-    
-    # ---- Build driver colours from TEAM_MAP (light/dark per team) ----
-    driver_colours = {}
-    team_to_drivers = {}
-
-    # group drivers by team
-    for drv in pivot.index:
-        team = TEAM_MAP.get(drv)
-        if team:
-            # TEAM_MAP may be a mapping {driver_code: team_name} or {team_name: base_color}
-            team_to_drivers.setdefault(team, []).append(drv)
-
-    # derive base colour for each team; if TEAM_MAP is not colour-bearing, replace with your team->hex mapping
-    # If your TEAM_MAP is like {"Porsche": "#6A0DAD", ...}, keep as-is.
-    # If your TEAM_MAP maps drivers to team names only, create a TEAM_BASE dict and use that instead here.
-    TEAM_BASE = {
-        "Porsche":  "#6A0DAD",
-        "Jaguar":   "#808080",
-        "Nissan":   "#FF69B4",
-        "Mahindra": "#D72638",
-        "DS":       "#C5A100",
-        "Andretti": "#66CCFF",
-        "Citroen":  "#00AEEF",
-        "Envision": "#00A650",
-        "Kiro":     "#8B4513",
-        "Lola":     "#FFD700",
-    }
-
-    for team, dlist in team_to_drivers.items():
-        base = TEAM_BASE.get(team, "#888888")
-        d_sorted = sorted(dlist)
-        if len(d_sorted) == 1:
-            driver_colours[d_sorted[0]] = darken(base, 0.20)
-        else:
-            driver_colours[d_sorted[0]] = lighten(base, 0.35)
-            driver_colours[d_sorted[1]] = darken(base, 0.25)
-            for extra in d_sorted[2:]:
-                driver_colours[extra] = base
-
-    # fallback for any driver without a team match
-    for drv in pivot.index:
-        driver_colours.setdefault(drv, "#888888")
-    
-    # ---- Build Plotly Figure ----
+    # ============================================================
+    #  Build Plotly figure
+    # ============================================================
     fig = go.Figure()
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
 
-    st.write("DEBUG driver_colours used:", driver_colours)
-    
     for set_no in set_numbers:
         colours = [driver_colours[drv] for drv in drivers]
 
@@ -241,10 +126,9 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
                 offsetgroup=str(set_no),
                 marker=dict(color=colours),
                 text=[f"{int(v)} laps" if v > 0 else "" for v in pivot[set_no]],
-                textposition="outside",
+                textposition="outside"
             )
         )
-
 
     fig.update_layout(
         barmode="group",
@@ -252,7 +136,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
         xaxis_title="Laps",
         yaxis_autorange="reversed",
         height=600,
-        margin=dict(t=60,r=40,b=40,l=120)
+        margin=dict(t=60, r=40, b=40, l=120)
     )
 
     return fig
@@ -409,9 +293,7 @@ with tab2:
                     "tyre_set_numbers": set_no
                 }
 
-            # FE team colors (light/dark)
             TEAM_COLOURS_2SHADE = {
-                # team: (light, dark)
                 "Porsche": ("#6A0DAD","#A666D6"),
                 "Jaguar": ("#808080","#B0B0B0"),
                 "Nissan": ("#FF66B2","#FF99CC"),
@@ -430,6 +312,7 @@ with tab2:
                 TEAM_COLOURS_2SHADE,
                 f"{session_choice} — Run/Wait Profile"
             )
+
             st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
@@ -448,6 +331,7 @@ with tab2:
             st.exception(e)
     else:
         st.info("Upload both FP1 and FP2 to view tyre‑set usage chart.")
+
 
 # ============================================================
 #  TAB 3 — Fast-Lap Sequences
@@ -477,12 +361,18 @@ with tab3:
             df300 = sequences_to_table(fast_results, 300)
             if not df300.empty:
                 html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
-                components.html(html300, height=min(120 + 28 * len(df300), 800),
-                                scrolling=True)
+                components.html(
+                    html300,
+                    height=min(120 + 28 * len(df300), 800),
+                    scrolling=True
+                )
 
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
-                components.html(html350, height=min(120 + 28 * len(df350), 800),
-                                scrolling=True)
+                components.html(
+                    html350,
+                    height=min(120 + 28 * len(df350), 800),
+                    scrolling=True
+                )

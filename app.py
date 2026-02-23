@@ -122,6 +122,51 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     pivot = agg.pivot(index="Driver", columns="SetNo",
                       values="Laps").fillna(0)
 
+    # ---- Build FE team-based driver colours ----
+    TEAM_BASE = {
+        "Porsche":  "#6A0DAD",
+        "Jaguar":   "#808080",
+        "Nissan":   "#FF69B4",
+        "Mahindra": "#D72638",
+        "DS":       "#C5A100",
+        "Andretti": "#1F77B4",
+        "Citroen":  "#00AEEF",
+        "Envision": "#00A650",
+        "Kiro":     "#8B4513",
+        "Lola":     "#FFD700",
+    }
+
+    # map drivers → teams (your FE driver-team map)
+    DRIVER_TEAM = {
+        "WEH":"Porsche", "MUE":"Porsche",
+        "EVA":"Jaguar", "DAC":"Jaguar",
+        "ROW":"Nissan","NAT":"Nissan",
+        "DEV":"Mahindra","MOR":"Mahindra",
+        "BAR":"DS","GUE":"DS",
+        "DEN":"Andretti","DRU":"Andretti",
+        "CAS":"Citroen","JEV":"Citroen",
+        "BUE":"Envision","ERI":"Envision",
+        "TIC":"Kiro","MAR":"Kiro",
+        "DIG":"Lola","MAL":"Lola",
+    }
+
+    # Build team→drivers list
+    team_to_drivers = {}
+    for drv in pivot.index:
+        team = DRIVER_TEAM.get(drv)
+        team_to_drivers.setdefault(team, []).append(drv)
+
+    # Now generate driver colours
+    driver_colours = {}
+    for team, drvs in team_to_drivers.items():
+        base = TEAM_BASE[team]
+        drvs_sorted = sorted(drvs)   # alphabetical
+        if len(drvs_sorted) == 1:
+            driver_colours[drvs_sorted[0]] = darken(base, 0.20)
+        else:
+            driver_colours[drvs_sorted[0]] = lighten(base, 0.35)
+            driver_colours[drvs_sorted[1]] = darken(base, 0.25)
+    
     # ---- Use DRIVER_COLOUR directly (FE-colour-correct) ----
     driver_colours = {}
     for drv in pivot.index:

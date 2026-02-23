@@ -122,6 +122,11 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     pivot = agg.pivot(index="Driver", columns="SetNo",
                       values="Laps").fillna(0)
 
+    # -------- USE FE's DRIVER_COLOUR directly --------
+    driver_colours = {}
+    for drv in pivot.index:
+        driver_colours[drv] = DRIVER_COLOUR.get(drv, "#888888")
+    
     # ---- Build FE team-based driver colours ----
     TEAM_BASE = {
         "Porsche":  "#6A0DAD",
@@ -219,9 +224,9 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
     set_numbers = pivot.columns.tolist()
     drivers = pivot.index.tolist()
 
-
     for set_no in set_numbers:
         colours = [driver_colours[drv] for drv in drivers]
+
         fig.add_trace(
             go.Bar(
                 x=pivot[set_no],
@@ -234,6 +239,7 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
                 textposition="outside"
             )
         )
+
 
     fig.update_layout(
         barmode="group",

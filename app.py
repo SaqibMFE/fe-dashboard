@@ -535,6 +535,8 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
+        st.write("DEBUG fast_results:", fast_results)
+        
         # -------------------------------------------------------------
         # ENHANCEMENT FUNCTION: bold P for fastest lap + run number
         # -------------------------------------------------------------

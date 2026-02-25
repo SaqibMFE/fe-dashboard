@@ -244,7 +244,7 @@ def plot_runwait(per_struct, team_map, team_colours_2shade, title):
             
                 # ---- Give OUT/IN runs a minimum visual height ----
                 if dur == 0:
-                    dur = 0.4   
+                    dur = 0.6   
             
                 txt = tyre_labels[i] if i < len(tyre_labels) else ""
                 fig.add_trace(

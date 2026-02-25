@@ -13,6 +13,128 @@ from fe_core.tyre_sets import label_sets_with_numbers_strict
 from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 from fe_core.plots import runwait_figure
 
+import plotly.graph_objects as go
+
+def runwait_figure_with_labels(
+    per_struct: dict,
+    team_map: dict,
+    team_colours_2shade: dict,
+    title: str,
+    run_label_threshold_min: float = 1.2,
+    wait_label_threshold_min: float = 0.6,
+):
+    """
+    Build a vertically-stacked run/wait timeline with labels:
+      - RUN: tyre set label
+      - WAIT: 'X.X min'
+    Labels are shown inside the bar if segment is long enough; always present on hover.
+    """
+
+    # ---- Driver plotting order: by team pairs, then any extras ----
+    order = []
+    for team, pair in team_map.items():
+        order.extend(pair)
+    # add any drivers not listed in team_map (if any)
+    order.extend([d for d in per_struct.keys() if d not in order])
+
+    # ---- Resolve per-driver colour (light/dark by position in team pair) ----
+    driver_colour = {}
+    for team, pair in team_map.items():
+        if team not in team_colours_2shade:
+            continue
+        shades = team_colours_2shade[team]  # (light, dark)
+        if len(pair) >= 1:
+            driver_colour[pair[0]] = shades[0]
+        if len(pair) >= 2:
+            driver_colour[pair[1]] = shades[1]
+    # Fallback grey
+    for d in order:
+        driver_colour.setdefault(d, "#888888")
+
+    fig = go.Figure()
+
+    # ---- For each driver: stack bars by progressively increasing base ----
+    for drv in order:
+        data = per_struct.get(drv)
+        if not data:
+            continue
+
+        runs = data.get("run_durs", [])
+        waits = data.get("wait_durs", [])
+        labels = data.get("tyre_labels", [])
+
+        base = 0.0
+        # Interleave RUN i then WAIT i (if present)
+        max_pairs = max(len(runs), len(waits))
+        for i in range(max_pairs):
+            # RUN i
+            if i < len(runs):
+                dur = runs[i] or 0.0
+                txt = labels[i] if i < len(labels) else ""
+                show_text = (dur >= run_label_threshold_min)
+                fig.add_trace(
+                    go.Bar(
+                        x=[drv],
+                        y=[dur],
+                        base=[base],
+                        marker=dict(color=driver_colour[drv], line=dict(width=0.3, color="black")),
+                        name=f"{drv} run {i+1}",
+                        text=[txt if show_text else ""],
+                        textposition="inside",
+                        textfont=dict(size=10),
+                        hovertemplate=(
+                            f"<b>{drv}</b><br>"
+                            f"Run {i+1}: {{y:.1f}} min<br>"
+                            f"{txt}<extra></extra>"
+                        ),
+                        showlegend=False,
+                    )
+                )
+                base += dur
+
+            # WAIT i
+            if i < len(waits):
+                wdur = waits[i] or 0.0
+                wait_txt = f"{wdur:.1f} min"
+                show_text = (wdur >= wait_label_threshold_min)
+                fig.add_trace(
+                    go.Bar(
+                        x=[drv],
+                        y=[wdur],
+                        base=[base],
+                        marker=dict(color="#D3D3D3", line=dict(width=0.3, color="black")),
+                        name=f"{drv} wait {i+1}",
+                        text=[wait_txt if show_text else ""],
+                        textposition="inside",
+                        textfont=dict(size=10),
+                        hovertemplate=(
+                            f"<b>{drv}</b><br>"
+                            f"Wait {i+1}: {{y:.1f}} min<extra></extra>"
+                        ),
+                        showlegend=False,
+                    )
+                )
+                base += wdur
+
+    fig.update_layout(
+        barmode="stack",
+        title=title,
+        xaxis=dict(
+            title=None,
+            tickangle=45,
+            categoryorder="array",
+            categoryarray=order
+        ),
+        yaxis=dict(
+            title="Time (minutes)",
+            gridcolor="#e0e0e0",
+            zeroline=True
+        ),
+        margin=dict(t=60, r=20, b=80, l=60),
+        height=600
+    )
+
+    return fig
 
 # ============================================================
 #  PLOTLY TYRE-SET PLOT (FP1 + FP2)
@@ -351,7 +473,7 @@ with tab2:
                 "Lola": ("#FFD700","#FFE866"),
             }
 
-            fig = runwait_figure(
+            fig = runwait_figure_with_labels(
                 per_struct,
                 TEAM_MAP,
                 TEAM_COLOURS_2SHADE,

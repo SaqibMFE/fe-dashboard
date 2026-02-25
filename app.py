@@ -473,6 +473,20 @@ with tab2:
             # --------------------------------------------------------------------
             # Plot with new strict run/wait function (correct labels, correct sets)
             # --------------------------------------------------------------------
+
+            TEAM_COLOURS_2SHADE = {
+            "Porsche": ("#6A0DAD","#A666D6"),
+            "Jaguar": ("#808080","#B0B0B0"),
+            "Nissan": ("#FF66B2","#FF99CC"),
+            "Mahindra": ("#D72638","#F15A5A"),
+            "DS": ("#C5A100","#E0C440"),
+            "Andretti": ("#66CCFF","#99DDFF"),
+            "Citroen": ("#00AEEF","#80D9FF"),
+            "Envision": ("#00A650","#66CDAA"),
+            "Kiro": ("#8B4513","#CD853F"),
+            "Lola": ("#FFD700","#FFE866"),
+            }
+            
             fig = plot_runwait(
                 per_struct,
                 TEAM_MAP,

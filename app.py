@@ -659,37 +659,69 @@ with tab3:
                         scrolling=True
                     )
 
+
 # ============================================================
-# TAB 4 — FULL RACE POSITION EVOLUTION (ALL POSITIONS)
+# TAB 4 — FULL RACE POSITION MATRIX (P × Lap)
 # ============================================================
 with tab4:
     st.header("Race Position Matrix (Pos × Lap)")
 
-    race_file = st.file_uploader("Upload Race Lap Chart (.xlsx)", type=["xlsx"], key="race_file_matrix")
+    race_file = st.file_uploader(
+        "Upload Race Lap Chart (.xlsx)", 
+        type=["xlsx"], 
+        key="race_file_matrix"
+    )
 
     if not race_file:
         st.info("Upload the Race Lap Chart file to view the position matrix.")
     else:
         import pandas as pd
 
-        df = pd.read_excel(race_file, engine="openpyxl", header=None)
+        # Load the race file
+        try:
+            df = pd.read_excel(race_file, engine="openpyxl", header=None)
+        except Exception as e:
+            st.error("Could not read race file.")
+            st.exception(e)
+            st.stop()
 
+        # Lap columns begin at index 2
         lap_cols = df.columns[2:]
         num_laps = len(lap_cols)
 
         # ----------------------------------------------------------
-        # FIX: Build only valid rows (skip empty rows)
+        # Helper: detect the unwanted numeric row (1,2,3,...)
         # ----------------------------------------------------------
-        table = []
-        for pos in range(len(df)):
-            row = df.iloc[pos, 2:].tolist()
-            # skip empty rows (all NaN)
-            if all(pd.isna(x) for x in row):
-                continue
-            table.append(row)
+        def is_lap_header_row(values):
+            """Detects rows like [1,2,3,...] which must be skipped."""
+            try:
+                numeric = pd.to_numeric(pd.Series(values), errors="coerce")
+            except:
+                return False
+            if numeric.isna().any():
+                return False
+            ints = numeric.astype(int).tolist()
+            return ints == list(range(1, len(ints) + 1))
 
         # ----------------------------------------------------------
-        # Colour mapping (same as your FE style)
+        # Build table, skipping:
+        #   • fully empty rows
+        #   • the lap-number header row
+        # ----------------------------------------------------------
+        table = []
+        for r in range(len(df)):
+            row_vals = df.iloc[r, 2:].tolist()
+
+            if all(pd.isna(x) for x in row_vals):
+                continue
+
+            if is_lap_header_row(row_vals):
+                continue
+
+            table.append(row_vals)
+
+        # ----------------------------------------------------------
+        # FE Team colour mapping
         # ----------------------------------------------------------
         driver_to_colour = {}
         for team, pair in TEAM_MAP.items():
@@ -701,14 +733,16 @@ with tab4:
             if len(pair) >= 2:
                 driver_to_colour[pair[1]] = shades[1]
 
-        # fallback default
+        # fallback
         for row in table:
             for drv in row:
-                if drv not in driver_to_colour and pd.notna(drv):
+                if pd.isna(drv):
+                    continue
+                if drv not in driver_to_colour:
                     driver_to_colour[drv] = "#CCCCCC"
 
         # ----------------------------------------------------------
-        # Build HTML table
+        # HTML table build
         # ----------------------------------------------------------
         html = """
         <table style="border-collapse:collapse; font-family:Segoe UI; font-size:12px;">
@@ -717,17 +751,22 @@ with tab4:
                     <th style='padding:4px; border:1px solid #222;'>P</th>
         """
 
-        for lap in range(1, num_laps+1):
+        # Lap header row (Lap 1, Lap 2 …)
+        for lap in range(1, num_laps + 1):
             html += f"<th style='padding:4px; border:1px solid #222;'>Lap {lap}</th>"
 
         html += "</tr></thead><tbody>"
 
-        # Valid rows only (no NaNs)
+        # Position rows
         for pos_idx, row in enumerate(table, start=1):
-            html += f"<tr><td style='padding:4px; border:1px solid #222; font-weight:bold;'>{pos_idx}</td>"
+            html += (
+                f"<tr>"
+                f"<td style='padding:4px; border:1px solid #222; font-weight:bold;'>{pos_idx}</td>"
+            )
+
             for drv in row:
                 if pd.isna(drv):
-                    html += "<td style='padding:4px; border:1px solid #555; background:#FFFFFF;'></td>"
+                    html += "<td style='padding:4px; border:1px solid #555; background:white;'></td>"
                 else:
                     color = driver_to_colour.get(str(drv), "#ccc")
                     html += (

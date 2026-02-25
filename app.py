@@ -547,7 +547,6 @@ with tab3:
             # 1) Find fastest lap per driver
             best_lap_map = df.groupby("Driver")["BestLap_s"].transform("min")
 
-            # 2) Bold the 'P' of the fastest lap in the Sequence
             def bold_fastest(row):
                 seq = row["Sequence"]
                 if row["BestLap_s"] == best_lap_map[row.name]:
@@ -556,20 +555,17 @@ with tab3:
 
             df["Sequence"] = df.apply(bold_fastest, axis=1)
 
-            # 3) Add run number where fastest lap happened
-            # fast_results structure: fast_results[driver][power_mode] -> list of dicts
-            run_lookup = {}  # (Driver → run index where best lap occurred)
+            # 2) Add Run Number where fastest lap happened
+            run_lookup = {}
 
-            # Build lookup
+            # fast_results: fast_results[driver][power] = list of laps
             for drv, modes in fast_results.items():
                 for power, laps in modes.items():
                     if len(laps) == 0:
                         continue
-                    # find fastest lap within this mode
-                    best_row = min(laps, key=lambda x: x["BestLap_s"])
-                    run_lookup.setdefault(drv, {})[power] = best_row.get("RunNumber", "")
+                    fastest = min(laps, key=lambda x: x["BestLap_s"])
+                    run_lookup.setdefault(drv, {})[power] = fastest.get("RunNumber", "")
 
-            # apply lookup
             def assign_run_number(row):
                 drv = row["Driver"]
                 if drv in run_lookup:
@@ -586,7 +582,7 @@ with tab3:
 
         # -------------------------------------------------------------
         # SHOW 300 + 350 KW TABLES SIDE BY SIDE
-        -------------------------------------------------------------
+        # -------------------------------------------------------------
         colA, colB = st.columns(2)
 
         if show_300:

@@ -241,6 +241,11 @@ def plot_runwait(per_struct, team_map, team_colours_2shade, title):
             # RUN
             if i < len(runs):
                 dur = run_durs[i]
+            
+                # ---- Give OUT/IN runs a minimum visual height ----
+                if dur == 0:
+                    dur = 0.4   
+            
                 txt = tyre_labels[i] if i < len(tyre_labels) else ""
                 fig.add_trace(
                     go.Bar(

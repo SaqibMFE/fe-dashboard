@@ -268,7 +268,10 @@ def generate_tyreset_plot_plotly(fp1_bytes: bytes, fp2_bytes: bytes):
 #  NICE HTML TABLE WITH COLOUR RIBBONS
 # ============================================================
 def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
-    """Return a clean HTML table."""
+    """HTML table in FE style with team-coloured ribbons + FastLap_RunNumber support."""
+
+    has_fastlap_col = "FastLap_RunNumber" in df.columns
+
     rows = []
     rows.append(f"""
     <h3 style="font-family:Segoe UI; color:#001F3F; margin:12px 0 6px 0;">
@@ -277,10 +280,18 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
     <table style="font-family:Segoe UI; font-size:15px; border-collapse:collapse; width:100%;">
         <thead style="background:#001F3F; color:white; font-weight:600;">
             <tr>
-                <th style="text-align:right; padding:6px 10px;">#</th>
-                <th style="text-align:left; padding:6px 10px;">Driver</th>
-                <th style="text-align:right; padding:6px 10px;">Best Lap (s)</th>
-                <th style="text-align:left; padding:6px 10px;">Sequence</th>
+                <th style="padding:8px 10px; text-align:right;">#</th>
+                <th style="padding:8px 10px; text-align:left;">Driver</th>
+                <th style="padding:8px 10px; text-align:right;">Best Lap (s)</th>
+                <th style="padding:8px 10px; text-align:left;">Sequence</th>
+    """)
+
+    if has_fastlap_col:
+        rows.append("""
+                <th style="padding:8px 10px; text-align:center;">FastLap Run #</th>
+        """)
+
+    rows.append("""
             </tr>
         </thead>
         <tbody>
@@ -290,6 +301,7 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
         band = "#F2F4F7" if i % 2 == 0 else "white"
         rib_color = DRIVER_COLOUR.get(str(r["Driver"]), "#888")
         best_str = f"{float(r['BestLap_s']):.3f}" if pd.notna(r["BestLap_s"]) else ""
+        seq_html = r["Sequence"]
 
         rows.append(f"""
             <tr style="background:{band}; border-left:6px solid {rib_color};">
@@ -300,9 +312,15 @@ def render_table_with_ribbons(df: pd.DataFrame, title: str) -> str:
                         <b>{best_str}</b>
                     </span>
                 </td>
-                <td style="padding:6px 10px;">{r['Sequence']}</td>
-            </tr>
+                <td style="padding:6px 10px;">{seq_html}</td>
         """)
+
+        if has_fastlap_col:
+            rows.append(
+                f'<td style="text-align:center; padding:6px 10px;">{r["FastLap_RunNumber"]}</td>'
+            )
+
+        rows.append("</tr>")
 
     rows.append("</tbody></table>")
     return "\n".join(rows)

@@ -237,10 +237,11 @@ with tab1:
     # Session selection (FP1 / FP2)
     # ----------------------------
     session_choice = st.radio(
-        "Choose session",
-        ["FP1", "FP2"],
-        horizontal=True
-    )
+    "Choose session",
+    ["FP1", "FP2"],
+    horizontal=True,
+    key="tab1_session"          # <-- unique key for Tab 1
+)
 
     # Determine which file to use
     file = fp1_file if session_choice == "FP1" else fp2_file
@@ -304,7 +305,12 @@ with tab1:
 with tab2:
     st.header("Run/Wait Timeline + Strict Tyre Set Logic")
 
-    session_choice = st.radio("Choose session", ["FP1","FP2"], horizontal=True)
+    session_choice = st.radio(
+    "Choose session",
+    ["FP1","FP2"],
+    horizontal=True,
+    key="tab2_session"          # <-- unique key for Tab 2
+)
     session_file = fp1_file if session_choice == "FP1" else fp2_file
 
     if not session_file:

@@ -258,50 +258,50 @@ with tab1:
         else:
             st.info("Upload FP2 file.")
 
-st.markdown("---")
-    st.subheader("Laptime Standings (300 kW + 350 kW)")
-
-    def make_standings_table(per_blocks, title):
-        # Compute fastlap structures for this session
-        fast_results = compute_fastlap_sequences(per_blocks, powers=(300, 350))
-
-        # 300 kW table
-        df300 = sequences_to_table(fast_results, 300)
-        if not df300.empty:
-            st.markdown(f"### {title} — 300 kW")
-            df300_show = df300[["Driver", "BestLap_s"]].copy()
-            df300_show["BestLap_s"] = df300_show["BestLap_s"].map(
-                lambda x: f"{float(x):.3f}" if pd.notna(x) else ""
-            )
-            st.table(df300_show)
-
-        # 350 kW table
-        df350 = sequences_to_table(fast_results, 350)
-        if not df350.empty:
-            st.markdown(f"### {title} — 350 kW")
-            df350_show = df350[["Driver", "BestLap_s"]].copy()
-            df350_show["BestLap_s"] = df350_show["BestLap_s"].map(
-                lambda x: f"{float(x):.3f}" if pd.notna(x) else ""
-            )
-            st.table(df350_show)
-
-    # ---- FP1 Standings ----
-    if fp1_file:
-        try:
-            per1 = load_per_driver_from_bytes(fp1_file.getvalue())
-            make_standings_table(per1, "FP1")
-        except Exception as e:
-            st.error("Failed computing FP1 laptime standings.")
-            st.exception(e)
-
-    # ---- FP2 Standings ----
-    if fp2_file:
-        try:
-            per2 = load_per_driver_from_bytes(fp2_file.getvalue())
-            make_standings_table(per2, "FP2")
-        except Exception as e:
-            st.error("Failed computing FP2 laptime standings.")
-            st.exception(e)
+    st.markdown("---")
+        st.subheader("Laptime Standings (300 kW + 350 kW)")
+    
+        def make_standings_table(per_blocks, title):
+            # Compute fastlap structures for this session
+            fast_results = compute_fastlap_sequences(per_blocks, powers=(300, 350))
+    
+            # 300 kW table
+            df300 = sequences_to_table(fast_results, 300)
+            if not df300.empty:
+                st.markdown(f"### {title} — 300 kW")
+                df300_show = df300[["Driver", "BestLap_s"]].copy()
+                df300_show["BestLap_s"] = df300_show["BestLap_s"].map(
+                    lambda x: f"{float(x):.3f}" if pd.notna(x) else ""
+                )
+                st.table(df300_show)
+    
+            # 350 kW table
+            df350 = sequences_to_table(fast_results, 350)
+            if not df350.empty:
+                st.markdown(f"### {title} — 350 kW")
+                df350_show = df350[["Driver", "BestLap_s"]].copy()
+                df350_show["BestLap_s"] = df350_show["BestLap_s"].map(
+                    lambda x: f"{float(x):.3f}" if pd.notna(x) else ""
+                )
+                st.table(df350_show)
+    
+        # ---- FP1 Standings ----
+        if fp1_file:
+            try:
+                per1 = load_per_driver_from_bytes(fp1_file.getvalue())
+                make_standings_table(per1, "FP1")
+            except Exception as e:
+                st.error("Failed computing FP1 laptime standings.")
+                st.exception(e)
+    
+        # ---- FP2 Standings ----
+        if fp2_file:
+            try:
+                per2 = load_per_driver_from_bytes(fp2_file.getvalue())
+                make_standings_table(per2, "FP2")
+            except Exception as e:
+                st.error("Failed computing FP2 laptime standings.")
+                st.exception(e)
 
 # ============================================================
 #  TAB 2 — Run/Wait + Tyre Sets

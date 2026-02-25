@@ -535,38 +535,33 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
-        # -------------------------------------------------------------
+        # -------------------------------------------------------------------
         # Enhance table: Bold ONLY fastest P + add FastLap_RunNumber
-        # -------------------------------------------------------------
+        # -------------------------------------------------------------------
         def enhance_fastlap_table(df, power_kW):
             if df.empty:
                 return df
 
             df = df.copy()
 
-            # Add run number column
-            run_numbers = []
             bold_sequences = []
+            run_numbers = []
 
             for idx, row in df.iterrows():
                 drv = row["Driver"]
-                best = fast_results[drv][power_kW]["best"]
-                seq_string = fast_results[drv][power_kW]["sequence"]  # e.g., "O B B P B P"
 
-                tokens = seq_string.split()
+                # FE-core computed:
+                seq_string = fast_results[drv][power_kW]["sequence"]   # "O B B P B P"
+                tokens = seq_string.split()                            # ["O","B","B","P","B","P"]
 
-                # 1) Find FASTEST P index (always the LAST P in tokens)
+                # 1) FASTEST lap is ALWAYS last "P" in the sequence
                 fastest_index = None
                 for i, tok in enumerate(tokens):
                     if tok == "P":
                         fastest_index = i
-                # Convert to human-readable run number
-                if fastest_index is not None:
-                    run_num = fastest_index + 1
-                else:
-                    run_num = ""
 
-                run_numbers.append(run_num)
+                # Convert to human-readable index
+                run_numbers.append(fastest_index + 1 if fastest_index is not None else "")
 
                 # 2) Bold ONLY that P
                 bold_tokens = []
@@ -583,9 +578,9 @@ with tab3:
 
             return df
 
-        # -------------------------------------------------------------
-        # SHOW 300 + 350 KW TABLES SIDE BY SIDE
-        # -------------------------------------------------------------
+        # -------------------------------------------------------------------
+        # Show 300 + 350 kW side by side
+        # -------------------------------------------------------------------
         colA, colB = st.columns(2)
 
         # -------- 300 kW --------

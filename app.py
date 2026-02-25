@@ -668,23 +668,29 @@ with tab4:
     race_file = st.file_uploader("Upload Race Lap Chart (.xlsx)", type=["xlsx"], key="race_file_matrix")
 
     if not race_file:
-        st.info("Upload the Race Lap Chart file to view the full position matrix.")
+        st.info("Upload the Race Lap Chart file to view the position matrix.")
     else:
         import pandas as pd
 
         df = pd.read_excel(race_file, engine="openpyxl", header=None)
 
-        # Laps: columns 2 onward
         lap_cols = df.columns[2:]
         num_laps = len(lap_cols)
 
-        # Build table of drivers: each row = position at lap N
+        # ----------------------------------------------------------
+        # FIX: Build only valid rows (skip empty rows)
+        # ----------------------------------------------------------
         table = []
-        for pos in range(len(df)):       # pos = row index
+        for pos in range(len(df)):
             row = df.iloc[pos, 2:].tolist()
+            # skip empty rows (all NaN)
+            if all(pd.isna(x) for x in row):
+                continue
             table.append(row)
 
-        # Build colour LUT
+        # ----------------------------------------------------------
+        # Colour mapping (same as your FE style)
+        # ----------------------------------------------------------
         driver_to_colour = {}
         for team, pair in TEAM_MAP.items():
             shades = TEAM_COLOURS_2SHADE.get(team)
@@ -695,40 +701,42 @@ with tab4:
             if len(pair) >= 2:
                 driver_to_colour[pair[1]] = shades[1]
 
-        # Fallback
-        for pos_row in table:
-            for drv in pos_row:
-                if drv not in driver_to_colour:
-                    driver_to_colour[drv] = "#cccccc"
+        # fallback default
+        for row in table:
+            for drv in row:
+                if drv not in driver_to_colour and pd.notna(drv):
+                    driver_to_colour[drv] = "#CCCCCC"
 
-        # Build HTML
+        # ----------------------------------------------------------
+        # Build HTML table
+        # ----------------------------------------------------------
         html = """
         <table style="border-collapse:collapse; font-family:Segoe UI; font-size:12px;">
             <thead>
                 <tr>
-                    <th style='padding:4px; border:1px solid #222;'>Pos</th>
+                    <th style='padding:4px; border:1px solid #222;'>P</th>
         """
 
-        # Lap numbers header
         for lap in range(1, num_laps+1):
             html += f"<th style='padding:4px; border:1px solid #222;'>Lap {lap}</th>"
 
         html += "</tr></thead><tbody>"
 
-        # Rows (positions)
+        # Valid rows only (no NaNs)
         for pos_idx, row in enumerate(table, start=1):
             html += f"<tr><td style='padding:4px; border:1px solid #222; font-weight:bold;'>{pos_idx}</td>"
-
             for drv in row:
-                color = driver_to_colour.get(str(drv), "#ccc")
-                html += (
-                    f"<td style='padding:4px; border:1px solid #555; "
-                    f"background:{color}; text-align:center; font-weight:bold;'>"
-                    f"{drv}</td>"
-                )
+                if pd.isna(drv):
+                    html += "<td style='padding:4px; border:1px solid #555; background:#FFFFFF;'></td>"
+                else:
+                    color = driver_to_colour.get(str(drv), "#ccc")
+                    html += (
+                        f"<td style='padding:4px; border:1px solid #555; "
+                        f"background:{color}; text-align:center; font-weight:bold;'>"
+                        f"{drv}</td>"
+                    )
             html += "</tr>"
 
         html += "</tbody></table>"
 
-        # Show table
         st.markdown(html, unsafe_allow_html=True)

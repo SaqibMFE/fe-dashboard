@@ -537,6 +537,8 @@ with tab2:
 with tab3:
     st.header("Fast-Lap Sequences (O/B/P)")
 
+    from fe_core.runwait_strict import compute_runs  # use proper run logic
+
     for sess, file in (("FP1", fp1_file), ("FP2", fp2_file)):
         st.subheader(sess)
 
@@ -553,9 +555,9 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
-        # -------------------------------------------------------------
-        # Enhance: bold fastest P + add FastLap_RunNumber column
-        # -------------------------------------------------------------
+        # ------------------------------------------------------------------------
+        # ENHANCEMENT: Bold fastest P + true RunNumber from session
+        # ------------------------------------------------------------------------
         def enhance_fastlap_table(df, power_kW):
             if df.empty:
                 return df
@@ -568,27 +570,58 @@ with tab3:
             for idx, row in df.iterrows():
                 drv = row["Driver"]
 
+                # -------------------------
+                # Get FE-core fast lap info
+                # -------------------------
+                best = fast_results[drv][power_kW]["best"]
                 seq_string = fast_results[drv][power_kW]["sequence"]
                 tokens = seq_string.split()
 
-                # 1️⃣ Find the index of the FASTEST P = last P in sequence
+                # Locate fastest P in the sequence
                 fastest_index = None
                 for i, tok in enumerate(tokens):
                     if tok == "P":
                         fastest_index = i
 
-                # 2️⃣ Convert to human-readable index
-                run_num = fastest_index + 1 if fastest_index is not None else ""
-                run_numbers.append(run_num)
+                # -------------------------
+                # NOW compute REAL RUN NUMBER
+                # using df of that driver
+                # -------------------------
+                df_driver = per_blocks[drv]  # full outing table for the driver
+                df_driver2 = df_driver.copy()
+                df_driver2["Time_val"] = pd.to_numeric(df_driver2["Time"], errors="coerce")
+                df_driver2["Power"] = pd.to_numeric(df_driver2["S1 PM"], errors="coerce")
 
-                # 3️⃣ Bold only that P
+                # find the index of the fastest lap in the full outing table
+                mask = (df_driver2["Power"] == power_kW) & (df_driver2["Time_val"] == best)
+                try:
+                    best_idx = df_driver2[mask].index[0]
+                except:
+                    run_numbers.append("")
+                    bold_sequences.append(seq_string)
+                    continue
+
+                # compute real runs using correct engineering run logic
+                runs, _ = compute_runs(df_driver2)
+
+                # RUN NUMBER = the run that covers best_idx
+                real_run_no = ""
+                for r_i, r in enumerate(runs, start=1):
+                    if r["start_tod"] <= df_driver2.loc[best_idx, "TOD"] <= r["end_tod"]:
+                        real_run_no = r_i
+                        break
+
+                run_numbers.append(real_run_no)
+
+                # -------------------------
+                # Bold ONLY the fastest P
+                # -------------------------
                 bold_tokens = []
                 for i, tok in enumerate(tokens):
                     if tok == "P" and i == fastest_index:
                         bold_tokens.append("<b>P</b>")
                     else:
                         bold_tokens.append(tok)
-
                 bold_sequences.append(" ".join(bold_tokens))
 
             df["Sequence"] = bold_sequences
@@ -596,39 +629,21 @@ with tab3:
 
             return df
 
-        # -------------------------------------------------------------
-        # SHOW 300 + 350 kW tables side by side
-        # -------------------------------------------------------------
+        # ------------------------------------------------------------------------
+        # Render tables
+        # ------------------------------------------------------------------------
         colA, colB = st.columns(2)
 
-        # ---------------- 300 kW ----------------
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
             df300 = enhance_fastlap_table(df300, 300)
-
-            # DEBUG — ensure column is present
-            st.write("DEBUG 300 columns:", df300.columns.tolist())
-
             if not df300.empty:
                 html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
-                components.html(
-                    html300,
-                    height=min(120 + 28 * len(df300), 900),
-                    scrolling=True
-                )
+                components.html(html300, height=min(120 + 28 * len(df300), 800), scrolling=True)
 
-        # ---------------- 350 kW ----------------
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
             df350 = enhance_fastlap_table(df350, 350)
-
-            # DEBUG — ensure column is present
-            st.write("DEBUG 350 columns:", df350.columns.tolist())
-
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
-                components.html(
-                    html350,
-                    height=min(120 + 28 * len(df350), 900),
-                    scrolling=True
-                )
+                components.html(html350, height=min(120 + 28 * len(df350), 800), scrolling=True)

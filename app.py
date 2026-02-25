@@ -657,3 +657,104 @@ with tab3:
                         height=min(120 + 28 * len(df350), 800),
                         scrolling=True
                     )
+
+# ============================================================
+# TAB 4 — FULL RACE POSITION EVOLUTION (ALL POSITIONS)
+# ============================================================
+tab4 = st.tabs(["Race Position Evolution"])[0]
+
+with tab4:
+    st.header("Race Position Evolution (P1 → P20 per Lap)")
+
+    race_file = st.file_uploader("Upload Race Lap Chart (.xlsx)", type=["xlsx"], key="race_file")
+
+    if not race_file:
+        st.info("Upload the Race Lap Chart file.")
+    else:
+        import pandas as pd
+
+        try:
+            df_race = pd.read_excel(race_file, engine="openpyxl", header=None)
+        except Exception as e:
+            st.error("Could not read race file.")
+            st.exception(e)
+            st.stop()
+
+        # ----------------------------------------------------------
+        # Extract lap columns (everything from column index 2 onward)
+        # ----------------------------------------------------------
+        lap_cols = df_race.columns[2:]                      # Lap 1 onwards
+        num_laps = len(lap_cols)
+
+        # Build dictionary: Driver -> [positions over laps]
+        driver_positions = {}
+
+        for lap_i, col in enumerate(lap_cols, start=1):
+            column = df_race[col]                           # Column for lap_i
+            # Loop over all positions (row index = position-1)
+            for pos, drv in enumerate(column, start=1):
+                if pd.isna(drv): 
+                    continue
+                if drv not in driver_positions:
+                    driver_positions[drv] = []
+                driver_positions[drv].append(pos)
+
+        laps = list(range(1, num_laps + 1))
+
+        # ----------------------------------------------------------
+        # Build colour map based on FE team mapping
+        # ----------------------------------------------------------
+        driver_colours = {}
+        for team, pair in TEAM_MAP.items():
+            if team in TEAM_COLOURS_2SHADE:
+                shades = TEAM_COLOURS_2SHADE[team]
+                if len(pair) >= 1:
+                    driver_colours[pair[0]] = shades[0]
+                if len(pair) >= 2:
+                    driver_colours[pair[1]] = shades[1]
+
+        # Fallback grey
+        for drv in driver_positions:
+            driver_colours.setdefault(drv, "#888888")
+
+        # ----------------------------------------------------------
+        # Create Plotly graph
+        # ----------------------------------------------------------
+        fig = go.Figure()
+
+        for drv, pos_list in driver_positions.items():
+            # If driver has missing laps, fill them with last position known
+            if len(pos_list) < num_laps:
+                pos_list = pos_list + [pos_list[-1]] * (num_laps - len(pos_list))
+
+            fig.add_trace(
+                go.Scatter(
+                    x=laps,
+                    y=pos_list,
+                    mode="lines+markers",
+                    name=drv,
+                    line=dict(width=2, color=driver_colours[drv]),
+                    marker=dict(size=6, color=driver_colours[drv]),
+                    hovertemplate=f"Driver: {drv}<br>Lap: %{{x}}<br>Pos: %{{y}}<extra></extra>"
+                )
+            )
+
+        fig.update_layout(
+            title="Race Position Evolution (All Drivers)",
+            xaxis_title="Lap",
+            yaxis_title="Position",
+            yaxis=dict(autorange="reversed"),        # P1 at top
+            height=700,
+            legend_title="Drivers",
+            margin=dict(t=60, r=20, b=60, l=60)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ----------------------------------------------------------
+        # Data Table (optional)
+        # ----------------------------------------------------------
+        st.subheader("Race Position Table (all drivers, all laps)")
+        table_df = pd.DataFrame(driver_positions, index=laps)
+        table_df.index.name = "Lap"
+        st.dataframe(table_df, use_container_width=True)

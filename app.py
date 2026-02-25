@@ -535,50 +535,48 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
-        st.write("DEBUG fast_results:", fast_results)
-        
         # -------------------------------------------------------------
-        # ENHANCEMENT FUNCTION: bold P for fastest lap + run number
+        # ENHANCEMENT FUNCTION: Bold P + FastLap_RunNumber
         # -------------------------------------------------------------
-        def enhance_fastlap_table(df):
+        def enhance_fastlap_table(df, power_kW):
             if df.empty:
                 return df
 
             df = df.copy()
 
-            # 1) Find fastest lap per driver
-            best_lap_map = df.groupby("Driver")["BestLap_s"].transform("min")
+            # 1) Bold P in Sequence for fastest lap
+            best_map = df.groupby("Driver")["BestLap_s"].transform("min")
 
-            def bold_fastest(row):
+            def bold_p(row):
                 seq = row["Sequence"]
-                if row["BestLap_s"] == best_lap_map[row.name]:
+                if row["BestLap_s"] == best_map[row.name]:
                     return seq.replace("P", "<b>P</b>")
                 return seq
 
-            df["Sequence"] = df.apply(bold_fastest, axis=1)
+            df["Sequence"] = df.apply(bold_p, axis=1)
 
-            # 2) Add Run Number where fastest lap happened
-            run_lookup = {}
-
-            # fast_results: fast_results[driver][power] = list of laps
-            for drv, modes in fast_results.items():
-                for power, laps in modes.items():
-                    if len(laps) == 0:
-                        continue
-                    fastest = min(laps, key=lambda x: x["BestLap_s"])
-                    run_lookup.setdefault(drv, {})[power] = fastest.get("RunNumber", "")
-
-            def assign_run_number(row):
+            # 2) Determine fastest lap run index from Sequence string
+            def run_number(row):
                 drv = row["Driver"]
-                if drv in run_lookup:
-                    power = int(row["Power_kW"])
-                    return run_lookup.get(drv, {}).get(power, "")
+                best = fast_results[drv][power_kW]["best"]
+                seq = fast_results[drv][power_kW]["sequence"]  # e.g. "O B B P B P"
+
+                tokens = seq.split()  # ["O","B","B","P",...]
+
+                # Find the P corresponding to the best lap
+                # The fastest lap corresponds to the *last* P with that lap time
+                # per FE convention
+                if row["BestLap_s"] != best:
+                    return ""
+
+                # Find first P, or if multiple P laps → earliest one was fastest
+                for idx, tok in enumerate(tokens):
+                    if tok == "P":
+                        return idx + 1  # human-readable index
+
                 return ""
 
-            if "Power_kW" in df.columns:
-                df["FastLap_RunNumber"] = df.apply(assign_run_number, axis=1)
-            else:
-                df["FastLap_RunNumber"] = ""
+            df["FastLap_RunNumber"] = df.apply(run_number, axis=1)
 
             return df
 
@@ -587,9 +585,10 @@ with tab3:
         # -------------------------------------------------------------
         colA, colB = st.columns(2)
 
+        # -------- 300 kW --------
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
-            df300 = enhance_fastlap_table(df300)
+            df300 = enhance_fastlap_table(df300, 300)
 
             if not df300.empty:
                 html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
@@ -599,9 +598,10 @@ with tab3:
                     scrolling=True
                 )
 
+        # -------- 350 kW --------
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
-            df350 = enhance_fastlap_table(df350)
+            df350 = enhance_fastlap_table(df350, 350)
 
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")

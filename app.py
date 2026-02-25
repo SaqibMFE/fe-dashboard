@@ -428,11 +428,11 @@ with tab2:
     st.header("Run/Wait Timeline + Strict Tyre Set Logic")
 
     session_choice = st.radio(
-    "Choose session",
-    ["FP1","FP2"],
-    horizontal=True,
-    key="tab2_session"          # <-- unique key for Tab 2
-)
+        "Choose session",
+        ["FP1", "FP2"],
+        horizontal=True,
+        key="tab2_session"
+    )
     session_file = fp1_file if session_choice == "FP1" else fp2_file
 
     if not session_file:
@@ -446,10 +446,20 @@ with tab2:
             per_blocks = None
 
         if per_blocks:
+
+            # ---------------------------------------------------------
+            # USE YOUR NEW FE-CORE STRICT MODULE
+            # ---------------------------------------------------------
+            from fe_core.runwait_strict import compute_runs, compute_sets, plot_runwait
+
             per_struct = {}
             for drv, df in per_blocks.items():
-                runs, waits = compute_runs_waits(df)
-                set_no, labels = label_sets_with_numbers_strict(runs)
+
+                # --- Use your correct engineering segmentation logic ---
+                runs, waits = compute_runs(df)
+
+                # --- Strict tyre-set logic ---
+                set_no, labels = compute_sets(runs)
 
                 per_struct[drv] = {
                     "runs": runs,
@@ -460,37 +470,15 @@ with tab2:
                     "tyre_set_numbers": set_no
                 }
 
-            TEAM_COLOURS_2SHADE = {
-                "Porsche": ("#6A0DAD","#A666D6"),
-                "Jaguar": ("#808080","#B0B0B0"),
-                "Nissan": ("#FF66B2","#FF99CC"),
-                "Mahindra": ("#D72638","#F15A5A"),
-                "DS": ("#C5A100","#E0C440"),
-                "Andretti": ("#66CCFF","#99DDFF"),
-                "Citroen": ("#00AEEF","#80D9FF"),
-                "Envision": ("#00A650","#66CDAA"),
-                "Kiro": ("#8B4513","#CD853F"),
-                "Lola": ("#FFD700","#FFE866"),
-            }
-
-            # ---------------- DEBUG BLOCK ----------------
-            drv_debug = list(per_struct.keys())[0]   # first driver, or pick one manually
-            st.write("DEBUG DRIVER:", drv_debug)
-            st.write("RUNS:", per_struct[drv_debug]["runs"])
-            st.write("RUN_DURS:", per_struct[drv_debug]["run_durs"])
-            st.write("WAITS:", per_struct[drv_debug]["waits"])
-            st.write("WAIT_DURS:", per_struct[drv_debug]["wait_durs"])
-            st.write("SET_NUMBERS:", per_struct[drv_debug]["tyre_set_numbers"])
-            st.write("TYRE_LABELS:", per_struct[drv_debug]["tyre_labels"])
-            # ----------------------------------------------
-            
-            fig = runwait_figure_with_labels(
+            # --------------------------------------------------------------------
+            # Plot with new strict run/wait function (correct labels, correct sets)
+            # --------------------------------------------------------------------
+            fig = plot_runwait(
                 per_struct,
                 TEAM_MAP,
                 TEAM_COLOURS_2SHADE,
                 f"{session_choice} — Run/Wait Profile"
             )
-
             st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")

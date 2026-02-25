@@ -473,6 +473,17 @@ with tab2:
                 "Lola": ("#FFD700","#FFE866"),
             }
 
+            # ---------------- DEBUG BLOCK ----------------
+drv_debug = list(per_struct.keys())[0]   # first driver, or pick one manually
+st.write("DEBUG DRIVER:", drv_debug)
+st.write("RUNS:", per_struct[drv_debug]["runs"])
+st.write("RUN_DURS:", per_struct[drv_debug]["run_durs"])
+st.write("WAITS:", per_struct[drv_debug]["waits"])
+st.write("WAIT_DURS:", per_struct[drv_debug]["wait_durs"])
+st.write("SET_NUMBERS:", per_struct[drv_debug]["tyre_set_numbers"])
+st.write("TYRE_LABELS:", per_struct[drv_debug]["tyre_labels"])
+# ----------------------------------------------
+            
             fig = runwait_figure_with_labels(
                 per_struct,
                 TEAM_MAP,

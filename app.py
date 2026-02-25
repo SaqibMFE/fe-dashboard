@@ -535,10 +535,64 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
+        # -------------------------------------------------------------
+        # ENHANCEMENT FUNCTION: bold P for fastest lap + run number
+        # -------------------------------------------------------------
+        def enhance_fastlap_table(df):
+            if df.empty:
+                return df
+
+            df = df.copy()
+
+            # 1) Find fastest lap per driver
+            best_lap_map = df.groupby("Driver")["BestLap_s"].transform("min")
+
+            # 2) Bold the 'P' of the fastest lap in the Sequence
+            def bold_fastest(row):
+                seq = row["Sequence"]
+                if row["BestLap_s"] == best_lap_map[row.name]:
+                    return seq.replace("P", "<b>P</b>")
+                return seq
+
+            df["Sequence"] = df.apply(bold_fastest, axis=1)
+
+            # 3) Add run number where fastest lap happened
+            # fast_results structure: fast_results[driver][power_mode] -> list of dicts
+            run_lookup = {}  # (Driver → run index where best lap occurred)
+
+            # Build lookup
+            for drv, modes in fast_results.items():
+                for power, laps in modes.items():
+                    if len(laps) == 0:
+                        continue
+                    # find fastest lap within this mode
+                    best_row = min(laps, key=lambda x: x["BestLap_s"])
+                    run_lookup.setdefault(drv, {})[power] = best_row.get("RunNumber", "")
+
+            # apply lookup
+            def assign_run_number(row):
+                drv = row["Driver"]
+                if drv in run_lookup:
+                    power = int(row["Power_kW"])
+                    return run_lookup.get(drv, {}).get(power, "")
+                return ""
+
+            if "Power_kW" in df.columns:
+                df["FastLap_RunNumber"] = df.apply(assign_run_number, axis=1)
+            else:
+                df["FastLap_RunNumber"] = ""
+
+            return df
+
+        # -------------------------------------------------------------
+        # SHOW 300 + 350 KW TABLES SIDE BY SIDE
+        -------------------------------------------------------------
         colA, colB = st.columns(2)
 
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
+            df300 = enhance_fastlap_table(df300)
+
             if not df300.empty:
                 html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
                 components.html(
@@ -549,6 +603,8 @@ with tab3:
 
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
+            df350 = enhance_fastlap_table(df350)
+
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
                 components.html(

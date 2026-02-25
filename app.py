@@ -536,7 +536,7 @@ with tab3:
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
         # -------------------------------------------------------------
-        # ENHANCEMENT FUNCTION: Bold P + FastLap_RunNumber
+        # Enhance table: Bold ONLY fastest P + add FastLap_RunNumber
         # -------------------------------------------------------------
         def enhance_fastlap_table(df, power_kW):
             if df.empty:
@@ -544,39 +544,42 @@ with tab3:
 
             df = df.copy()
 
-            # 1) Bold P in Sequence for fastest lap
-            best_map = df.groupby("Driver")["BestLap_s"].transform("min")
+            # Add run number column
+            run_numbers = []
+            bold_sequences = []
 
-            def bold_p(row):
-                seq = row["Sequence"]
-                if row["BestLap_s"] == best_map[row.name]:
-                    return seq.replace("P", "<b>P</b>")
-                return seq
-
-            df["Sequence"] = df.apply(bold_p, axis=1)
-
-            # 2) Determine fastest lap run index from Sequence string
-            def run_number(row):
+            for idx, row in df.iterrows():
                 drv = row["Driver"]
                 best = fast_results[drv][power_kW]["best"]
-                seq = fast_results[drv][power_kW]["sequence"]  # e.g. "O B B P B P"
+                seq_string = fast_results[drv][power_kW]["sequence"]  # e.g., "O B B P B P"
 
-                tokens = seq.split()  # ["O","B","B","P",...]
+                tokens = seq_string.split()
 
-                # Find the P corresponding to the best lap
-                # The fastest lap corresponds to the *last* P with that lap time
-                # per FE convention
-                if row["BestLap_s"] != best:
-                    return ""
-
-                # Find first P, or if multiple P laps → earliest one was fastest
-                for idx, tok in enumerate(tokens):
+                # 1) Find FASTEST P index (always the LAST P in tokens)
+                fastest_index = None
+                for i, tok in enumerate(tokens):
                     if tok == "P":
-                        return idx + 1  # human-readable index
+                        fastest_index = i
+                # Convert to human-readable run number
+                if fastest_index is not None:
+                    run_num = fastest_index + 1
+                else:
+                    run_num = ""
 
-                return ""
+                run_numbers.append(run_num)
 
-            df["FastLap_RunNumber"] = df.apply(run_number, axis=1)
+                # 2) Bold ONLY that P
+                bold_tokens = []
+                for i, tok in enumerate(tokens):
+                    if tok == "P" and i == fastest_index:
+                        bold_tokens.append("<b>P</b>")
+                    else:
+                        bold_tokens.append(tok)
+
+                bold_sequences.append(" ".join(bold_tokens))
+
+            df["Sequence"] = bold_sequences
+            df["FastLap_RunNumber"] = run_numbers
 
             return df
 
@@ -589,7 +592,6 @@ with tab3:
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
             df300 = enhance_fastlap_table(df300, 300)
-
             if not df300.empty:
                 html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
                 components.html(
@@ -602,7 +604,6 @@ with tab3:
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
             df350 = enhance_fastlap_table(df350, 350)
-
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
                 components.html(

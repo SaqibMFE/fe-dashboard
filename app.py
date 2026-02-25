@@ -535,9 +535,9 @@ with tab3:
 
         fast_results = compute_fastlap_sequences(per_blocks, powers=(300,350))
 
-        # -------------------------------------------------------------------
-        # Enhance table: Bold ONLY fastest P + add FastLap_RunNumber
-        # -------------------------------------------------------------------
+        # -------------------------------------------------------------
+        # Enhance: bold fastest P + add FastLap_RunNumber column
+        # -------------------------------------------------------------
         def enhance_fastlap_table(df, power_kW):
             if df.empty:
                 return df
@@ -550,20 +550,20 @@ with tab3:
             for idx, row in df.iterrows():
                 drv = row["Driver"]
 
-                # FE-core computed:
-                seq_string = fast_results[drv][power_kW]["sequence"]   # "O B B P B P"
-                tokens = seq_string.split()                            # ["O","B","B","P","B","P"]
+                seq_string = fast_results[drv][power_kW]["sequence"]
+                tokens = seq_string.split()
 
-                # 1) FASTEST lap is ALWAYS last "P" in the sequence
+                # 1️⃣ Find the index of the FASTEST P = last P in sequence
                 fastest_index = None
                 for i, tok in enumerate(tokens):
                     if tok == "P":
                         fastest_index = i
 
-                # Convert to human-readable index
-                run_numbers.append(fastest_index + 1 if fastest_index is not None else "")
+                # 2️⃣ Convert to human-readable index
+                run_num = fastest_index + 1 if fastest_index is not None else ""
+                run_numbers.append(run_num)
 
-                # 2) Bold ONLY that P
+                # 3️⃣ Bold only that P
                 bold_tokens = []
                 for i, tok in enumerate(tokens):
                     if tok == "P" and i == fastest_index:
@@ -578,31 +578,39 @@ with tab3:
 
             return df
 
-        # -------------------------------------------------------------------
-        # Show 300 + 350 kW side by side
-        # -------------------------------------------------------------------
+        # -------------------------------------------------------------
+        # SHOW 300 + 350 kW tables side by side
+        # -------------------------------------------------------------
         colA, colB = st.columns(2)
 
-        # -------- 300 kW --------
+        # ---------------- 300 kW ----------------
         if show_300:
             df300 = sequences_to_table(fast_results, 300)
             df300 = enhance_fastlap_table(df300, 300)
+
+            # DEBUG — ensure column is present
+            st.write("DEBUG 300 columns:", df300.columns.tolist())
+
             if not df300.empty:
                 html300 = render_table_with_ribbons(df300, f"{sess} — 300 kW")
                 components.html(
                     html300,
-                    height=min(120 + 28 * len(df300), 800),
+                    height=min(120 + 28 * len(df300), 900),
                     scrolling=True
                 )
 
-        # -------- 350 kW --------
+        # ---------------- 350 kW ----------------
         if show_350:
             df350 = sequences_to_table(fast_results, 350)
             df350 = enhance_fastlap_table(df350, 350)
+
+            # DEBUG — ensure column is present
+            st.write("DEBUG 350 columns:", df350.columns.tolist())
+
             if not df350.empty:
                 html350 = render_table_with_ribbons(df350, f"{sess} — 350 kW")
                 components.html(
                     html350,
-                    height=min(120 + 28 * len(df350), 800),
+                    height=min(120 + 28 * len(df350), 900),
                     scrolling=True
                 )

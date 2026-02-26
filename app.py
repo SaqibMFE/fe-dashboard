@@ -782,10 +782,10 @@ with tab4:
         st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
-# TAB 5 — QUALIFYING (300 kW ONLY)
+# TAB 5 — QUALIFYING (300 kW ONLY) — uses SAME logic as Tab 3
 # ============================================================
-with st.tabs(["Qualifying"])[0]:
-    st.header("Qualifying — 300 kW Analysis")
+with tab5:
+    st.header("Qualifying — 300 kW Analysis (Sequence BEFORE Fastest Lap)")
 
     qual_file = st.file_uploader(
         "Upload Qualifying OutingTable (.xlsx)",
@@ -797,7 +797,7 @@ with st.tabs(["Qualifying"])[0]:
         st.info("Upload the Qualifying OutingTable file.")
     else:
         try:
-            # Load outing table blocks
+            # Load per-driver blocks (same reader you use elsewhere)
             per_blocks = load_per_driver_from_bytes(qual_file.getvalue())
         except Exception as e:
             st.error("Could not read qualifying file.")
@@ -805,129 +805,82 @@ with st.tabs(["Qualifying"])[0]:
             per_blocks = None
 
         if per_blocks:
-
-            from fe_core.runwait_strict import compute_runs   # strict segmentation
+            from fe_core.runwait_strict import compute_runs  # strict run splitter
             from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 
             # -----------------------------------------------------------
-            # 1. Compute fastlap sequences for 300 kW
+            # 1) Use the SAME sequence engine as in Fast-Lap Sequences
             # -----------------------------------------------------------
             fast_results = compute_fastlap_sequences(per_blocks, powers=(300,))
-
             df300 = sequences_to_table(fast_results, 300)
-            df300 = df300.sort_values("BestLap_s").reset_index(drop=True)
+
+            if df300.empty:
+                st.info("No valid 300 kW laps found in the qualifying file.")
+                st.stop()
 
             # -----------------------------------------------------------
-            # 2. Build detailed table with SEQUENCE BEFORE fastest lap
+            # 2) Build table: sequence BEFORE fastest lap + real run number
             # -----------------------------------------------------------
             rows = []
 
-            for idx, row in df300.iterrows():
+            for _, row in df300.iterrows():
                 drv = row["Driver"]
-                best_lap = row["BestLap_s"]
+                best = row["BestLap_s"]
 
+                # Full sequence string from the SAME logic as Tab 3
+                seq_string = fast_results[drv][300]["sequence"]
+                tokens = seq_string.split()
+
+                # Find the P token that corresponds to the fastest lap:
+                # (same convention as Tab 3 — the "fastest" is the last P)
+                fastest_index = None
+                for i, tok in enumerate(tokens):
+                    if tok == "P":
+                        fastest_index = i
+
+                # Sequence BEFORE the fastest lap (exclude the fastest P)
+                if fastest_index is not None and fastest_index > 0:
+                    pre_tokens = tokens[:fastest_index]
+                else:
+                    pre_tokens = [] if fastest_index == 0 else tokens
+
+                pre_seq = " ".join(pre_tokens)
+
+                # ---- Compute real run number, using strict segmentation ----
                 df_driver = per_blocks[drv].copy()
                 df_driver["Time_val"] = pd.to_numeric(df_driver["Time"], errors="coerce")
                 df_driver["Power"] = pd.to_numeric(df_driver["S1 PM"], errors="coerce")
 
-                # Filter only valid 300 kW laps
-                laps_300 = df_driver[(df_driver["Power"] == 300) & df_driver["Time_val"].notna()]
+                # Identify the row that matches the FASTEST 300kW lap
+                mask = (df_driver["Power"] == 300) & (df_driver["Time_val"] == best)
+                real_run_no = ""
+                if mask.any():
+                    best_idx = df_driver[mask].index[0]
+                    best_tod = df_driver.loc[best_idx, "TOD"]
 
-                # Extract the lap that matches the fastest
-                mask = laps_300["Time_val"] == best_lap
-                if not mask.any():
-                    continue
-
-                best_idx = laps_300[mask].index[0]
-                best_tod = df_driver.loc[best_idx, "TOD"]
-
-                # -----------------------------------------------------------
-                # 3. Use strict run segmentation to find sequence before best
-                # -----------------------------------------------------------
-                runs, waits = compute_runs(df_driver)
-
-                # Find the run that contains the fastest lap
-                seq_tokens = []
-                found_run = None
-
-                for r in runs:
-                    if r["start_tod"] <= best_tod <= r["end_tod"]:
-                        found_run = r
-                        break
-
-                if found_run:
-                    # Slice the driver df to the run window
-                    df_run = df_driver[
-                        (df_driver["TOD"] >= found_run["start_tod"]) &
-                        (df_driver["TOD"] <= found_run["end_tod"])
-                    ].copy()
-
-                    # Sequence is O/B/P tokens before fastest lap
-                    seq_tokens = []
-                    for i, rr in df_run.iterrows():
-                        if rr["TOD"] == best_tod:
+                    runs, _ = compute_runs(df_driver)
+                    for r_i, r in enumerate(runs, start=1):
+                        if r["start_tod"] <= best_tod <= r["end_tod"]:
+                            real_run_no = r_i
                             break
-                        lap_time = rr["Time_val"]
-                        tok = "O"
-                        if lap_time < 200:
-                            tok = "B"
-                        if lap_time < 100:
-                            tok = "P"
-                        seq_tokens.append(tok)
-
-                seq_str = " ".join(seq_tokens)
 
                 rows.append({
                     "Driver": drv,
-                    "BestLap_s": best_lap,
-                    "SequenceBefore": seq_str
+                    "BestLap_s": best,
+                    # Use the standard table renderer, so put our pre-sequence under "Sequence"
+                    "Sequence": pre_seq,
+                    "FastLap_RunNumber": real_run_no
                 })
 
-            dfQ = pd.DataFrame(rows)
-            dfQ = dfQ.sort_values("BestLap_s").reset_index(drop=True)
+            dfQ = pd.DataFrame(rows).sort_values("BestLap_s").reset_index(drop=True)
 
             # -----------------------------------------------------------
-            # 4. Render in FE-style HTML table with driver ribbons
+            # 3) Render with the same FE-styled HTML as your other tables
+            #     (this function already supports FastLap_RunNumber)
             # -----------------------------------------------------------
-            html_rows = []
-
-            html_rows.append("""
-                <h3 style="font-family:Segoe UI; color:#001F3F; margin:12px 0 6px 0;">
-                    Qualifying — Fastest 300 kW Laps
-                </h3>
-                <table style="font-family:Segoe UI; font-size:15px; border-collapse:collapse; width:100%;">
-                    <thead style="background:#001F3F; color:white; font-weight:600;">
-                        <tr>
-                            <th style="padding:8px 10px; text-align:right;">#</th>
-                            <th style="padding:8px 10px; text-align:left;">Driver</th>
-                            <th style="padding:8px 10px; text-align:right;">Best Lap (s)</th>
-                            <th style="padding:8px 10px; text-align:left;">Sequence Before Fastest</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """)
-
-            for i, r in dfQ.iterrows():
-                band = "#F2F4F7" if i % 2 == 0 else "white"
-                rib_color = DRIVER_COLOUR.get(str(r["Driver"]), "#888")
-
-                html_rows.append(f"""
-                    <tr style="background:{band}; border-left:6px solid {rib_color};">
-                        <td style="text-align:right; padding:6px 10px;">{i+1}</td>
-                        <td style="padding:6px 10px;"><b>{r['Driver']}</b></td>
-                        <td style="text-align:right; padding:6px 10px;">
-                            <span style="background:#DFF0D8; padding:2px 6px; border-radius:4px;">
-                                <b>{float(r['BestLap_s']):.3f}</b>
-                            </span>
-                        </td>
-                        <td style="padding:6px 10px;">{r['SequenceBefore']}</td>
-                    </tr>
-                """)
-
-            html_rows.append("</tbody></table>")
-
-            components.html(
-                "\n".join(html_rows),
-                height=2000,
-                scrolling=True
+            htmlQ = render_table_with_ribbons(
+                dfQ,
+                "Qualifying (300 kW) — Sequence BEFORE Fastest Lap"
             )
+            components.html(htmlQ, height=min(120 + 28 * len(dfQ), 900), scrolling=True)
+

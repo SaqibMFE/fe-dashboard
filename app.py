@@ -924,4 +924,3 @@ with tab5:
             )
             # Height scales with rows but capped for usability
             components.html(htmlQ, height=min(120 + 28 * len(dfQ), 900), scrolling=True)
-``

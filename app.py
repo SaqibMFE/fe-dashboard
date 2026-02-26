@@ -782,10 +782,10 @@ with tab4:
         st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
-# TAB 5 — QUALIFYING (300 kW ONLY) — Full run sequence with fastest lap in bold
+# TAB 5 — QUALIFYING (300 kW ONLY) — Full run sequence; fastest lap in bold
 # ============================================================
 with tab5:
-    st.header("Qualifying — 300 kW (Full Run Sequence, Fastest Lap in Bold)")
+    st.header("Qualifying — 300 kW (Full Run Sequence; Fastest Lap in Bold)")
 
     qual_file = st.file_uploader(
         "Upload Qualifying OutingTable (.xlsx)",
@@ -797,7 +797,7 @@ with tab5:
         st.info("Upload the Qualifying OutingTable file.")
     else:
         try:
-            # Load per-driver blocks (same loader you already use)
+            # Use the same cached loader you already have
             per_blocks = load_per_driver_from_bytes(qual_file.getvalue())
         except Exception as e:
             st.error("Could not read qualifying file.")
@@ -805,122 +805,118 @@ with tab5:
             per_blocks = None
 
         if per_blocks:
-            from fe_core.runwait_strict import compute_runs         # strict run splitter
+            from fe_core.runwait_strict import compute_runs          # strict segmentation
             from fe_core.fastlaps import compute_fastlap_sequences, sequences_to_table
 
-            # -----------------------------------------------------------
-            # 1) Use the SAME sequence engine as in "Fast-Lap Sequences"
-            #    (compute ONLY for 300 kW)
-            # -----------------------------------------------------------
-            fast_results = compute_fastlap_sequences(per_blocks, powers=(300,))
-            df300 = sequences_to_table(fast_results, 300)
+            # 1) Compute fastest 300 kW results using the SAME engine as Tab 3
+            fast_results_full = compute_fastlap_sequences(per_blocks, powers=(300,))
+            df300 = sequences_to_table(fast_results_full, 300)
             if df300.empty:
                 st.info("No valid 300 kW laps found in the qualifying file.")
                 st.stop()
 
             rows = []
 
-            # -----------------------------------------------------------
-            # 2) For each driver:
-            #    • identify the run that contains the fastest 300 kW lap
-            #    • take ONLY that run's sequence (O/B/P) and bold the fastest lap
-            # -----------------------------------------------------------
             for _, row in df300.iterrows():
-                drv = row["Driver"]
-                best = row["BestLap_s"]  # numeric (seconds)
+                drv  = row["Driver"]
+                best = row["BestLap_s"]  # numeric seconds
 
-                # Full 300 kW sequence for the session from the SAME logic as Tab 3
-                seq_string = fast_results[drv][300]["sequence"] if (drv in fast_results and 300 in fast_results[drv]) else ""
-                tokens_all = seq_string.split() if isinstance(seq_string, str) else []
-
-                # Build chronologically ordered list of (tod, time_val) for 300 kW laps
+                # Driver data
                 df_driver = per_blocks[drv].copy()
-                df_driver["Time_val"] = pd.to_numeric(df_driver["Time"], errors="coerce")
-                df_driver["Power"]    = pd.to_numeric(df_driver["S1 PM"], errors="coerce")
+                df_driver["Time_val"] = pd.to_numeric(df_driver["Time"],   errors="coerce")
+                df_driver["Power"]    = pd.to_numeric(df_driver["S1 PM"],  errors="coerce")
 
-                laps300 = df_driver[(df_driver["Power"] == 300) & (df_driver["Time_val"].notna())].copy()
-                laps300 = laps300.sort_values("TOD")  # ensure chronological
+                # Identify the exact TOD of the fastest 300 kW lap
+                mask_best = (df_driver["Power"] == 300) & (df_driver["Time_val"] == best)
+                if not mask_best.any():
+                    # If we cannot locate the exact row, skip cleanly
+                    continue
+                best_idx = mask_best[mask_best].index[0]
+                best_tod = df_driver.loc[best_idx, "TOD"]
 
-                tod_list   = laps300["TOD"].tolist()
-                time_list  = laps300["Time_val"].tolist()
-
-                # Align tokens with laps; fallback to full-session sequence if mismatch
-                use_fallback_full = (len(tokens_all) != len(tod_list))
-
-                # Find best lap TOD (for the 300 kW best time)
-                best_tod = None
-                try:
-                    # If multiple equal times exist, take the first occurrence in time order
-                    best_idx = laps300.index[laps300["Time_val"] == best][0]
-                    best_tod = df_driver.loc[best_idx, "TOD"]
-                except Exception:
-                    # If we can't locate the exact row, we will still render using fallback
-                    use_fallback_full = True
-
-                # Strict run segmentation — to get the run window + run number
+                # 2) Strictly find the run that contains the fastest lap
                 runs, _ = compute_runs(df_driver)
                 run_window = None
                 run_no = ""
-
-                if best_tod is not None:
-                    for r_i, r in enumerate(runs, start=1):
-                        if r["start_tod"] <= best_tod <= r["end_tod"]:
-                            run_window = r
-                            run_no = r_i
-                            break
-
-                # -------------------------------------------------------
-                # Build the run-level sequence using the same O/B/P tokens:
-                #   - If alignment is perfect: slice tokens by TOD window
-                #   - Otherwise, fallback to full-session sequence
-                # -------------------------------------------------------
-                seq_out = ""
-                if (not use_fallback_full) and run_window is not None:
-                    # Map tokens to TOD via zipping (same chronological order)
-                    pairs = list(zip(tod_list, tokens_all))  # [(tod, token), ...]
-                    run_pairs = [(tod, tok) for (tod, tok) in pairs
-                                 if (run_window["start_tod"] <= tod <= run_window["end_tod"])]
-
-                    if run_pairs:
-                        seq_tokens = []
-                        for tod, tok in run_pairs:
-                            # Bold the token for the actual fastest 300 kW lap
-                            if best_tod is not None and tod == best_tod:
-                                # If the logic labeled it 'P', bold P; otherwise bold the token we have
-                                seq_tokens.append("<b>P</b>" if tok == "P" else f"<b>{tok}</b>")
-                            else:
-                                seq_tokens.append(tok)
-                        seq_out = " ".join(seq_tokens)
-                    else:
-                        use_fallback_full = True
-
-                if use_fallback_full:
-                    # Fallback: show full sequence and bold the last 'P' (same as Tab 3 convention)
-                    toks = tokens_all[:]
+                for r_i, r in enumerate(runs, start=1):
+                    if r["start_tod"] <= best_tod <= r["end_tod"]:
+                        run_window = r
+                        run_no = r_i
+                        break
+                if run_window is None:
+                    # Fallback: no run window found; just display session sequence with best in bold
+                    seq_all = fast_results_full.get(drv, {}).get(300, {}).get("sequence", "")
+                    toks = seq_all.split()
                     if toks:
-                        try:
-                            fastest_index = max(i for i, t in enumerate(toks) if t == "P")
-                            toks[fastest_index] = "<b>P</b>"
-                        except ValueError:
-                            # No P in sequence — bold nothing special
-                            pass
-                    seq_out = " ".join(toks)
+                        # bold the last P per your Tab 3 convention
+                        p_idx = None
+                        for i, t in enumerate(toks):
+                            if t == "P": p_idx = i
+                        if p_idx is not None:
+                            toks[p_idx] = "<b>P</b>"
+                    rows.append({
+                        "Driver": drv,
+                        "BestLap_s": best,
+                        "Sequence": " ".join(toks),
+                        "FastLap_RunNumber": run_no
+                    })
+                    continue
+
+                # 3) Slice the driver dataframe to this run window
+                df_run = df_driver[
+                    (df_driver["TOD"] >= run_window["start_tod"]) &
+                    (df_driver["TOD"] <= run_window["end_tod"])
+                ].copy()
+
+                # 4) Recompute the O/B/P sequence ONLY for this run, using the SAME engine
+                per_blocks_run = {drv: df_run}
+                fast_results_run = compute_fastlap_sequences(per_blocks_run, powers=(300,))
+                seq_run = fast_results_run.get(drv, {}).get(300, {}).get("sequence", "")
+                tokens_run = seq_run.split()
+
+                # 5) Build an index mapping of 300 kW timed laps inside the run (chronological)
+                laps300_run = df_run[(df_run["Power"] == 300) & (df_run["Time_val"].notna())].copy()
+                laps300_run = laps300_run.sort_values("TOD")
+                tod_run_list  = laps300_run["TOD"].tolist()
+
+                # Locate which position in the RUN sequence corresponds to fastest lap TOD
+                bold_index = None
+                if best_tod in tod_run_list:
+                    bold_index = tod_run_list.index(best_tod)
+
+                # Safety: sequences should align to 300 kW valid laps in the run
+                # If lengths mismatch, we still bold the nearest index if possible
+                seq_tokens_out = tokens_run[:]
+                if bold_index is not None and bold_index < len(seq_tokens_out):
+                    # Bold EXACT token for the fastest 300 kW lap within this run
+                    tok = seq_tokens_out[bold_index]
+                    seq_tokens_out[bold_index] = "<b>P</b>" if tok == "P" else f"<b>{tok}</b>"
+                else:
+                    # Fallback: bold the last P in the run sequence if mapping failed
+                    try:
+                        p_idx = max(i for i, t in enumerate(seq_tokens_out) if t == "P")
+                        seq_tokens_out[p_idx] = "<b>P</b>"
+                    except ValueError:
+                        # no P in sequence — leave as-is
+                        pass
+
+                # IMPORTANT: Do NOT stop at fastest — show the full run (including laps after)
+                seq_out = " ".join(seq_tokens_out)
 
                 rows.append({
                     "Driver": drv,
                     "BestLap_s": best,
-                    "Sequence": seq_out,               # full run sequence (fastest in bold)
-                    "FastLap_RunNumber": run_no        # optional, displayed if present
+                    "Sequence": seq_out,          # full run sequence with fastest lap bolded
+                    "FastLap_RunNumber": run_no
                 })
 
+            # Order by fastest lap ascending
             dfQ = pd.DataFrame(rows).sort_values("BestLap_s").reset_index(drop=True)
 
-            # -----------------------------------------------------------
-            # 3) Render with your existing styled HTML table helper
-            # -----------------------------------------------------------
+            # 6) Render with your existing FE-style table helper (supports FastLap_RunNumber)
             htmlQ = render_table_with_ribbons(
                 dfQ,
-                "Qualifying — 300 kW (Run Sequence; Fastest Lap in Bold)"
+                "Qualifying — 300 kW (Full Run Sequence; Fastest Lap in Bold)"
             )
-            # Height scales with rows but capped for usability
             components.html(htmlQ, height=min(120 + 28 * len(dfQ), 900), scrolling=True)
+

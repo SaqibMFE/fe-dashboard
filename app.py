@@ -28,7 +28,7 @@ def runwait_figure_with_labels(
     team_colours_2shade: dict,
     title: str,
     run_label_threshold_min: float = 1.2,
-    wait_label_threshold_min: float = 0.6,
+    wait_label_threshold_min: float = 1.0,
 ):
     """
     Build a vertically-stacked run/wait timeline with labels:

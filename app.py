@@ -359,11 +359,12 @@ def load_per_driver_from_bytes(uploaded_bytes: bytes):
 # ============================================================
 #  TABS
 # ============================================================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Session Overview",
     "Run/Wait + Tyre Sets",
     "Fast-Lap Sequences",
-    "Race"
+    "Race",
+    "Qualifying"
 ])
 
 
